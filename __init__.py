@@ -819,12 +819,12 @@ async def start_local_llm(data):
 async def my_hander_method(request):
     data =await request.json()
     # print(data)
+    if llama_port and llama_model and llama_chat_format:
+        return web.json_response({"port":llama_port,"model":llama_model,"chat_format":llama_chat_format} )
     try:
         result=await start_local_llm(data)
     except:
-        result={
-            {"port":None,"model":"","llama_cpp_error":True}
-        }
+        result= {"port":None,"model":"","llama_cpp_error":True}
         print('start_local_llm error')
 
     return web.json_response(result)
@@ -842,20 +842,16 @@ def re_start(request):
 
 # 导入节点
 from .nodes.PromptNode import GLIGENTextBoxApply_Advanced,EmbeddingPrompt,RandomPrompt,PromptSlide,PromptSimplification,PromptImage,JoinWithDelimiter
-from .nodes.ImageNode import ComparingTwoFrames,LoadImages_,CompositeImages,GridDisplayAndSave,GridInput,ImagesPrompt,SaveImageAndMetadata,SaveImageToLocal,SplitImage,GridOutput,GetImageSize_,MirroredImage,ImageColorTransfer,NoiseImage,TransparentImage,GradientImage,LoadImagesFromPath,LoadImagesFromURL,ResizeImage,TextImage,SvgImage,Image3D,ShowLayer,NewLayer,MergeLayers,CenterImage,AreaToMask,SmoothMask,SplitLongMask,ImageCropByAlpha,EnhanceImage,FaceToMask
+from .nodes.ImageNode import ImageListToBatch_,ComparingTwoFrames,LoadImages_,CompositeImages,GridDisplayAndSave,GridInput,ImagesPrompt,SaveImageAndMetadata,SaveImageToLocal,SplitImage,GridOutput,GetImageSize_,MirroredImage,ImageColorTransfer,NoiseImage,TransparentImage,GradientImage,LoadImagesFromPath,LoadImagesFromURL,ResizeImage,TextImage,SvgImage,Image3D,ShowLayer,NewLayer,MergeLayers,CenterImage,AreaToMask,SmoothMask,SplitLongMask,ImageCropByAlpha,EnhanceImage,FaceToMask
 # from .nodes.Vae import VAELoader,VAEDecode
 from .nodes.ScreenShareNode import ScreenShareNode,FloatingVideo
 
-from .nodes.ChatGPT import ChatGPTNode,ShowTextForGPT,CharacterInText,TextSplitByDelimiter
-from .nodes.Audio import GamePal,SpeechRecognition,SpeechSynthesis
+from .nodes.Audio import AudioPlayNode,SpeechRecognition,SpeechSynthesis
 from .nodes.Utils import IncrementingListNode,ListSplit,CreateLoraNames,CreateSampler_names,CreateCkptNames,CreateSeedNode,TESTNODE_,TESTNODE_TOKEN,AppInfo,IntNumber,FloatSlider,TextInput,ColorInput,FontInput,TextToNumber,DynamicDelayProcessor,LimitNumber,SwitchByIndex,MultiplicationNode
 from .nodes.Mask import PreviewMask_,MaskListReplace,MaskListMerge,OutlineMask,FeatheredMask
 
 from .nodes.Style import ApplyVisualStylePrompting,StyleAlignedReferenceSampler,StyleAlignedBatchAlign,StyleAlignedSampleReferenceLatents
 
-from .nodes.Video import VideoCombine_Adv,LoadVideoAndSegment,ImageListReplace,VAEEncodeForInpaint_Frames
-
-from .nodes.TripoSR import LoadTripoSRModel,TripoSRSampler,SaveTripoSRMesh
 
 
 # 要导出的所有节点及其名称的字典
@@ -886,6 +882,7 @@ NODE_CLASS_MAPPINGS = {
     "ImageColorTransfer":ImageColorTransfer,
     "ShowLayer":ShowLayer,
     "NewLayer":NewLayer,
+    "ImageListToBatch_":ImageListToBatch_,
     "CompositeImages_":CompositeImages,
     "SplitImage":SplitImage,
     "CenterImage":CenterImage,
@@ -907,10 +904,7 @@ NODE_CLASS_MAPPINGS = {
     # "VAEDecodeConsistencyDecoder":VAEDecode,
     "ScreenShare":ScreenShareNode,
     "FloatingVideo":FloatingVideo,
-    "ChatGPTOpenAI":ChatGPTNode,
-    "ShowTextForGPT":ShowTextForGPT,
-    "CharacterInText":CharacterInText,
-    "TextSplitByDelimiter":TextSplitByDelimiter,
+   
     "SpeechRecognition":SpeechRecognition,
     "SpeechSynthesis":SpeechSynthesis,
     "Color":ColorInput,
@@ -934,24 +928,21 @@ NODE_CLASS_MAPPINGS = {
     "ApplyVisualStylePrompting_":ApplyVisualStylePrompting,
     "StyleAlignedReferenceSampler_": StyleAlignedReferenceSampler,
     "StyleAlignedSampleReferenceLatents_": StyleAlignedSampleReferenceLatents,
-    "StyleAlignedBatchAlign_": StyleAlignedBatchAlign,
-    "LoadVideoAndSegment_":LoadVideoAndSegment,
-    "VideoCombine_Adv":VideoCombine_Adv,
+    "StyleAlignedBatchAlign_": StyleAlignedBatchAlign, 
     "ListSplit_":ListSplit,
-    "MaskListReplace_":MaskListReplace,
-    "ImageListReplace_":ImageListReplace,
-    "VAEEncodeForInpaint_Frames":VAEEncodeForInpaint_Frames,
+    "MaskListReplace_":MaskListReplace, 
     "IncrementingListNode_":IncrementingListNode,
     "PreviewMask_":PreviewMask_,
-     "LoadTripoSRModel_": LoadTripoSRModel,
-    "TripoSRSampler_": TripoSRSampler,
-    "SaveTripoSRMesh": SaveTripoSRMesh
-    # "GamePal":GamePal
+    "AudioPlay":AudioPlayNode
 }
 
 # 一个包含节点友好/可读的标题的字典
 NODE_DISPLAY_NAME_MAPPINGS = {
     "AppInfo":"App Info ♾️MixlabApp",
+    "ScreenShare":"Screen Share ♾️Mixlab",
+    "FloatingVideo":"Floating Video ♾️Mixlab",
+    "TextImage":"Text Image ♾️Mixlab",
+    
     "Color":"Color Input ♾️MixlabApp",
     "TextInput_":"Text Input ♾️MixlabApp",
     "FloatSlider":"Float Slider Input ♾️MixlabApp",
@@ -965,14 +956,13 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "SplitLongMask":"Splitting a long image into sections",
     "VAELoaderConsistencyDecoder":"Consistency Decoder Loader",
     "VAEDecodeConsistencyDecoder":"Consistency Decoder Decode",
-    "ScreenShare":"Screen Share ♾️Mixlab",
-    "FloatingVideo":"FloatingVideo ♾️Mixlab",
-    "ChatGPTOpenAI":"ChatGPT & Local LLM ♾️Mixlab",
-    "ShowTextForGPT":"Show Text ♾️MixlabApp",
+    
+    
     "MergeLayers":"Merge Layers ♾️Mixlab",
     "SpeechSynthesis":"SpeechSynthesis ♾️Mixlab",
     "SpeechRecognition":"SpeechRecognition ♾️Mixlab",
     "3DImage":"3DImage ♾️Mixlab",
+    "ImageListToBatch_":"Image List To Batch",
     "CompositeImages_":"Composite Images ♾️Mixlab",
     "DynamicDelayProcessor":"DynamicDelayByText ♾️Mixlab",
     "LaMaInpainting":"LaMaInpainting ♾️Mixlab",
@@ -998,13 +988,12 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "GridInput":"Grid Input ♾️Mixlab",
     "GridOutput":"Grid Output ♾️Mixlab",
     "GetImageSize_":"Get Image Size ♾️Mixlab",
-    "VAEEncodeForInpaint_Frames":"VAE Encode For Inpaint Frames ♾️Mixlab",
     "IncrementingListNode_":"Create Incrementing Number List ♾️Mixlab",
     "LoadImagesToBatch":"Load Images(base64) ♾️Mixlab",
     "PreviewMask_":"Preview Mask",
-    "LoadTripoSRModel_": "Load TripoSR Model",
-    "TripoSRSampler_": "TripoSR Sampler",
-    "SaveTripoSRMesh": "Save TripoSR Mesh"
+    "AudioPlay":"Audio Play ♾️Mixlab",
+
+     "MultiplicationNode":"Math Operation ♾️Mixlab",
 }
 
 # web ui的节点功能
@@ -1014,6 +1003,41 @@ WEB_DIRECTORY = "./web"
 logging.info('--------------')
 logging.info('\033[91m ### Mixlab Nodes: \033[93mLoaded')
 # print('\033[91m ### Mixlab Nodes: \033[93mLoaded')
+
+try:
+    from .nodes.ChatGPT import ChatGPTNode,ShowTextForGPT,CharacterInText,TextSplitByDelimiter
+    logging.info('ChatGPT.available True')
+
+    NODE_CLASS_MAPPINGS_V = {
+       "ChatGPTOpenAI":ChatGPTNode,
+        "ShowTextForGPT":ShowTextForGPT,
+        "CharacterInText":CharacterInText,
+        "TextSplitByDelimiter":TextSplitByDelimiter,
+    }
+
+    # 一个包含节点友好/可读的标题的字典
+    NODE_DISPLAY_NAME_MAPPINGS_V = {
+        "ChatGPTOpenAI":"ChatGPT & Local LLM ♾️Mixlab",
+        "ShowTextForGPT":"Show Text ♾️MixlabApp",
+        "CharacterInText":"Character In Text",
+        "TextSplitByDelimiter":"Text Split By Delimiter",
+    }
+
+
+    NODE_CLASS_MAPPINGS.update(NODE_CLASS_MAPPINGS_V)
+    NODE_DISPLAY_NAME_MAPPINGS.update(NODE_DISPLAY_NAME_MAPPINGS_V)
+
+except Exception as e:
+    logging.info('ChatGPT.available False')
+
+
+try:
+    from .nodes.edit_mask import EditMask
+    logging.info('edit_mask.available True')
+    NODE_CLASS_MAPPINGS['EditMask']=EditMask
+    NODE_DISPLAY_NAME_MAPPINGS['EditMask']="Edit Mask ♾️Mixlab"
+except Exception as e:
+    logging.info('edit_mask.available False')
 
 try:
     from .nodes.Lama import LaMaInpainting
@@ -1049,5 +1073,62 @@ try:
         NODE_CLASS_MAPPINGS['RembgNode_Mix']=RembgNode_
 except Exception as e:
     logging.info('RembgNode_.available False' )
+
+
+try:
+    from .nodes.Video import GenerateFramesByCount,scenesNode_,CombineAudioVideo,VideoCombine_Adv,LoadVideoAndSegment,ImageListReplace,VAEEncodeForInpaint_Frames,LoadAndCombinedAudio_
+    
+    NODE_CLASS_MAPPINGS_V = {
+        "VAEEncodeForInpaint_Frames":VAEEncodeForInpaint_Frames,
+        "ImageListReplace_":ImageListReplace,
+        "LoadVideoAndSegment_":LoadVideoAndSegment,
+        "VideoCombine_Adv":VideoCombine_Adv,
+        "LoadAndCombinedAudio_":LoadAndCombinedAudio_,
+        "CombineAudioVideo":CombineAudioVideo,
+        "ScenesNode_":scenesNode_,
+        "GenerateFramesByCount":GenerateFramesByCount 
+    }
+
+    # 一个包含节点友好/可读的标题的字典
+    NODE_DISPLAY_NAME_MAPPINGS_V = {
+        "VAEEncodeForInpaint_Frames":"VAE Encode For Inpaint Frames ♾️Mixlab",
+        "ImageListReplace_":"Image List Replace",
+        "LoadVideoAndSegment_":"Load Video And Segment",
+        "VideoCombine_Adv":"Video Combine",
+        "LoadAndCombinedAudio_":"Load And Combined Audio",
+        "CombineAudioVideo":"Combine Audio Video",
+        "ScenesNode_":"Scenes Node", 
+        "GenerateFramesByCount":"Generate Frames By Count"
+    }
+
+
+    NODE_CLASS_MAPPINGS.update(NODE_CLASS_MAPPINGS_V)
+    NODE_DISPLAY_NAME_MAPPINGS.update(NODE_DISPLAY_NAME_MAPPINGS_V)
+
+except:
+    logging.info('Video.available False')
+
+
+try:
+    from .nodes.TripoSR import LoadTripoSRModel,TripoSRSampler,SaveTripoSRMesh
+    logging.info('TripoSR.available')
+
+    NODE_CLASS_MAPPINGS['LoadTripoSRModel_']=LoadTripoSRModel
+    NODE_DISPLAY_NAME_MAPPINGS["LoadTripoSRModel_"]= "Load TripoSR Model"
+    
+    NODE_CLASS_MAPPINGS['TripoSRSampler_']=TripoSRSampler
+    NODE_DISPLAY_NAME_MAPPINGS["TripoSRSampler_"]= "TripoSR Sampler"
+
+    NODE_CLASS_MAPPINGS['SaveTripoSRMesh']=SaveTripoSRMesh
+    NODE_DISPLAY_NAME_MAPPINGS["SaveTripoSRMesh"]= "Save TripoSR Mesh"
+    
+
+except Exception as e:
+    logging.info('TripoSR.available False' )
+
+
+
+
+
 
 logging.info('\033[93m -------------- \033[0m')

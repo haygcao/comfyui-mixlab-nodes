@@ -6,11 +6,17 @@
 
 ##### `最新`：
 
-ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。模型下载后，放置到 `models/llamafile/`
+- 增加 Edit Mask，方便在生成的时候手动绘制 mask [workflow](./workflow/edit-mask-workflow.json)
+
+
+- ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。模型下载后，放置到 `models/llamafile/`
 
 - 右键菜单支持 text-to-text，方便对 prompt 词补全
 
-强烈推荐：[Phi-3-mini-4k-instruct-GGUF](https://huggingface.co/lmstudio-community/Phi-3-mini-4k-instruct-GGUF/tree/main)，备选：[llama3_if_ai_sdpromptmkr_q2k](https://hf-mirror.com/impactframes/llama3_if_ai_sdpromptmkr_q2k/tree/main)
+强烈推荐：
+[Phi-3-mini-4k-instruct-function-calling-GGUF](https://huggingface.co/nold/Phi-3-mini-4k-instruct-function-calling-GGUF)
+
+[Phi-3-mini-4k-instruct-GGUF](https://huggingface.co/lmstudio-community/Phi-3-mini-4k-instruct-GGUF/tree/main)，备选：[llama3_if_ai_sdpromptmkr_q2k](https://hf-mirror.com/impactframes/llama3_if_ai_sdpromptmkr_q2k/tree/main)
 
 - 右键菜单支持 image-to-text，使用多模态模型，多模态使用 [llava-phi-3-mini-gguf](https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main)，注意需要把llava-phi-3-mini-mmproj-f16.gguf也下载
 
@@ -20,7 +26,9 @@ ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一
 
 #### `相关插件推荐`
 
-<!-- [comfyui-sd-prompt-mixlab](https://github.com/shadowcz007/comfyui-sd-prompt-mixlab) -->
+[Comfyui-ChatTTS](https://github.com/shadowcz007/Comfyui-ChatTTS)
+
+[comfyui-sound-lab](https://github.com/shadowcz007/comfyui-sound-lab)
 
 [comfyui-Image-reward](https://github.com/shadowcz007/comfyui-Image-reward)
 
@@ -37,6 +45,7 @@ ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一
 - 发布为 app 的 workflow，可以在右键里再次编辑了
 - web app 可以设置分类，在 comfyui 右键菜单可以编辑更新 web app
 - 支持动态提示
+- 支持把输出显示到comfyui背景（TouchDesigner 风格）
 
 ![](./assets/微信图片_20240421205440.png)
 
@@ -158,6 +167,9 @@ pip install llama-cpp-python \
 
 > A new layer class node has been added, allowing you to separate the image into layers. After merging the images, you can input the controlnet for further processing.
 
+> The composite images node overlays a foreground image onto a background image at specified positions and scales, with optional blending modes and masking capabilities. position : 'overall',"center_center","left_bottom","center_bottom","right_bottom","left_top","center_top","right_top"
+
+
 ![layers](./assets/layers-workflow.svg)
 
 ![poster](./assets/poster-workflow.svg)
@@ -188,6 +200,12 @@ pip install llama-cpp-python \
 #### LoadImagesFromURL
 
 > Conveniently load images from a fixed address on the internet to ensure that default images in the workflow can be executed.
+
+#### TextImage
+
+> [下载字体](https://drxie.github.io/OSFCC/)放到 ```custom_nodes/comfyui-mixlab-nodes/assets/fonts```
+
+
 
 ### Style
 

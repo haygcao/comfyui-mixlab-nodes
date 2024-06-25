@@ -2,6 +2,8 @@ import { app } from '../../../scripts/app.js'
 import { $el } from '../../../scripts/ui.js'
 import { api } from '../../../scripts/api.js'
 
+import { td_bg } from './td_background.js'
+console.log('td_bg', td_bg)
 //本机安装的插件节点全集
 window._nodesAll = null
 
@@ -183,6 +185,25 @@ async function extractInputAndOutputData (
         }
 
         if (node.type == 'Color') {
+        }
+
+        // 语音输入的支持
+        if (node.type == 'LoadAndCombinedAudio_') {
+          // if (
+          //   data[id].widgets_values &&
+          //   data[id].widgets_values[0] &&
+          //   data[id].widgets_values[0].base64 &&
+          //   data[id].widgets_values[0].base64.length > 0
+          // ) {
+          //   options.defaultBase64 = data[id].widgets_values[0].base64
+          // }
+
+          input[inputIds.indexOf(id)] = {
+            ...data[id],
+            title: node.title,
+            id,
+            options
+          }
         }
 
         if (node.type === 'LoadImage') {
@@ -397,11 +418,11 @@ async function save (json, download = false, showInfo = true) {
 
 function getInputsAndOutputs () {
   const inputs =
-      `LoadImage LoadImagesToBatch ImagesPrompt_ VHS_LoadVideo CLIPTextEncode PromptSlide TextInput_ Color FloatSlider IntNumber CheckpointLoaderSimple LoraLoader`.split(
+      `LoadImage LoadImagesToBatch ImagesPrompt_ LoadAndCombinedAudio_ VHS_LoadVideo CLIPTextEncode PromptSlide TextInput_ Color FloatSlider IntNumber CheckpointLoaderSimple LoraLoader`.split(
         ' '
       ),
     outputs =
-      `SaveTripoSRMesh,PreviewImage,SaveImage,TransparentImage,ShowTextForGPT,VHS_VideoCombine,VideoCombine_Adv,Image Save,SaveImageAndMetadata_,ClipInterrogator`.split(
+      `SaveTripoSRMesh,PreviewImage,SaveImage,TransparentImage,ShowTextForGPT,CombineAudioVideo,VHS_VideoCombine,VideoCombine_Adv,Image Save,SaveImageAndMetadata_,ClipInterrogator`.split(
         ','
       )
 
@@ -500,6 +521,21 @@ app.registerExtension({
             alert('Please run the workflow before saving')
             // app.queuePrompt(0, 1)
             this.widgets.filter(w => w.name === 'version')[0].value += 1
+          }
+        })
+
+        //td bg
+        const tdBG = document.createElement('button')
+        tdBG.innerText = 'Canvas Mode'
+        tdBG.style = style
+        tdBG.style.marginLeft = '12px'
+
+        tdBG.addEventListener('click', () => {
+          td_bg.toggle()
+          if (td_bg.running) {
+            tdBG.style.background = 'yellow'
+          } else {
+            tdBG.style.background = 'transparent'
           }
         })
 
@@ -659,6 +695,7 @@ app.registerExtension({
 
         btns.appendChild(btn)
         btns.appendChild(download)
+        btns.appendChild(tdBG)
 
         document.body.appendChild(widget.div)
         this.addCustomWidget(widget)
@@ -672,6 +709,7 @@ app.registerExtension({
         this.serialize_widgets = true //需要保存参数
 
         window._mixlab_app_json = null
+ 
       }
 
       const onExecuted = nodeType.prototype.onExecuted
@@ -687,9 +725,8 @@ app.registerExtension({
           }
 
           const div = this.widgets.filter(w => w.div)[0].div
-          Array.from(
-            div.querySelectorAll('button'),
-            b => (b.style.background = 'yellow')
+          Array.from(div.querySelectorAll('button'), b =>
+            b.innerText != 'Canvas Mode' ? (b.style.background = 'yellow') : ''
           )
         } catch (error) {}
       }
