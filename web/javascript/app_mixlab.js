@@ -2,26 +2,17 @@ import { app } from '../../../scripts/app.js'
 import { $el } from '../../../scripts/ui.js'
 import { api } from '../../../scripts/api.js'
 
+import { td_bg } from './td_background.js'
+// console.log('td_bg', td_bg)
+import {
+  getUrl,
+  base64Df,
+  get_position_style,
+  getObjectInfo
+} from './common.js'
+
 //本机安装的插件节点全集
 window._nodesAll = null
-
-//获取当前系统的插件，节点清单
-function getObjectInfo () {
-  return new Promise(async (resolve, reject) => {
-    let url = getUrl()
-
-    try {
-      const response = await fetch(`${url}/object_info`)
-      const data = await response.json()
-      resolve(data)
-    } catch (error) {
-      reject(error)
-    }
-  })
-}
-
-const base64Df =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAAXNSR0IArs4c6QAAALZJREFUKFOFkLERwjAQBPdbgBkInECGaMLUQDsE0AkRVRAYWqAByxldPPOWHwnw4OBGye1p50UDSoA+W2ABLPN7i+C5dyC6R/uiAUXRQCs0bXoNIu4QPQzAxDKxHoALOrZcqtiyR/T6CXw7+3IGHhkYcy6BOR2izwT8LptG8rbMiCRAUb+CQ6WzQVb0SNOi5Z2/nX35DRyb/ENazhpWKoGwrpD6nICp5c2qogc4of+c7QcrhgF4Aa/aoAFHiL+RAAAAAElFTkSuQmCC'
 
 const parseImageToBase64 = url => {
   return new Promise((res, rej) => {
@@ -40,39 +31,6 @@ const parseImageToBase64 = url => {
         console.log('发生错误:', error)
       })
   })
-}
-
-function get_position_style (ctx, widget_width, y, node_height) {
-  const MARGIN = 12 // the margin around the html element
-
-  /* Create a transform that deals with all the scrolling and zooming */
-  const elRect = ctx.canvas.getBoundingClientRect()
-  const transform = new DOMMatrix()
-    .scaleSelf(
-      elRect.width / ctx.canvas.width,
-      elRect.height / ctx.canvas.height
-    )
-    .multiplySelf(ctx.getTransform())
-    .translateSelf(MARGIN, MARGIN + y)
-
-  return {
-    transformOrigin: '0 0',
-    transform: transform,
-    left: `0`,
-    top: `0`,
-    cursor: 'pointer',
-    position: 'absolute',
-    maxWidth: `${widget_width - MARGIN * 2}px`,
-    // maxHeight: `${node_height - MARGIN * 2}px`, // we're assuming we have the whole height of the node
-    width: `${widget_width - MARGIN * 2}px`,
-    // height: `${node_height * 0.3 - MARGIN * 2}px`,
-    // background: '#EEEEEE',
-    display: 'flex',
-    flexDirection: 'column',
-    // alignItems: 'center',
-    justifyContent: 'flex-start',
-    zIndex: 9999999
-  }
 }
 
 async function drawImageToCanvas (imageUrl, sFactor = 320) {
@@ -185,6 +143,25 @@ async function extractInputAndOutputData (
         if (node.type == 'Color') {
         }
 
+        // 语音输入的支持
+        if (node.type == 'LoadAndCombinedAudio_') {
+          // if (
+          //   data[id].widgets_values &&
+          //   data[id].widgets_values[0] &&
+          //   data[id].widgets_values[0].base64 &&
+          //   data[id].widgets_values[0].base64.length > 0
+          // ) {
+          //   options.defaultBase64 = data[id].widgets_values[0].base64
+          // }
+
+          input[inputIds.indexOf(id)] = {
+            ...data[id],
+            title: node.title,
+            id,
+            options
+          }
+        }
+
         if (node.type === 'LoadImage') {
           // loadImage的mask支持
           let output = node.outputs.filter(ot => ot.type == 'MASK')[0]
@@ -235,7 +212,10 @@ async function extractInputAndOutputData (
         node.type === 'KSampler' ||
         node.type == 'SamplerCustom' ||
         node.type === 'ChinesePrompt_Mix' ||
-        node.type === 'Seed_'
+        node.type === 'Seed_' ||
+        node.type === 'SiliconflowLLM' ||
+        node.type === 'ChatGPTOpenAI' ||
+        node.type === 'SiliconflowTextToImageNode'
       ) {
         // seed 的类型收集
         try {
@@ -253,23 +233,6 @@ async function extractInputAndOutputData (
   output = output.filter(i => i)
 
   return { input, output, seed, seedTitle }
-}
-
-function getUrl () {
-  let api_host = `${window.location.hostname}:${window.location.port}`
-  let api_base = ''
-  let url = `${window.location.protocol}//${api_host}${api_base}`
-  return url
-}
-
-const getLocalData = key => {
-  let data = {}
-  try {
-    data = JSON.parse(localStorage.getItem(key)) || {}
-  } catch (error) {
-    return {}
-  }
-  return data
 }
 
 async function save_app (json) {
@@ -304,20 +267,28 @@ function downloadJsonFile (jsonData, fileName = 'mix_app.json') {
 }
 
 async function save (json, download = false, showInfo = true) {
-  let nodesAll = window._nodesAll || (await getObjectInfo())
+  if (!window._nodesAll) {
+    window._nodesAll = await getObjectInfo();
+  }
 
-  console.log('####SAVE', nodesAll, json[0])
+  let nodesAll = window._nodesAll;
+  
+  // let nodesAll = window._nodesAll || (await getObjectInfo())
+
+  console.log('####SAVE', nodesAll, json)
 
   const name = json[0],
     version = json[5],
     share_prefix = json[6], //用于分享的功能扩展
     link = json[7], //用于创建界面上的跳转链接
     category = json[8] || '', //用于分类
+    idle_animation = json[9], //用于动画，比如数字人her
     description = json[4],
     inputIds = json[2].split('\n').filter(f => f),
     outputIds = json[3].split('\n').filter(f => f)
 
   const iconData = json[1][0]
+
   let { filename, subfolder, type } = iconData
   let iconUrl = api.apiURL(
     `/view?filename=${encodeURIComponent(
@@ -370,6 +341,27 @@ async function save (json, download = false, showInfo = true) {
     try {
       data.app.icon = await drawImageToCanvas(iconUrl)
     } catch (error) {}
+
+    let images = []
+    if (json[1].length > 1 && idle_animation) {
+      images = Array.from(json[1], j => {
+        let { filename, subfolder, type } = j
+        return api.apiURL(
+          `/view?filename=${encodeURIComponent(
+            filename
+          )}&type=${type}&subfolder=${subfolder}${app.getPreviewFormatParam()}${app.getRandParam()}`
+        )
+      })
+    }
+
+    try {
+      for (let index = 0; index < images.length; index++) {
+        const imgurl = images[index]
+        images[index] = await drawImageToCanvas(imgurl)
+      }
+      if (idle_animation) data.app.idle_animation = images
+    } catch (error) {}
+
     // console.log(data.app)
     // let http_workflow = app.graph.serialize()
     await save_app(data)
@@ -379,13 +371,17 @@ async function save (json, download = false, showInfo = true) {
 
     if (showInfo) {
       let open = window.confirm(
-        `You can now access the standalone application on a new page!\n${getUrl()}/mixlab/app?filename=${encodeURIComponent(
+        `You can now access the standalone application on a new page!\n${getUrl()}/mixlab/app${
+          data.app.idle_animation ? '/her.html' : ''
+        }?filename=${encodeURIComponent(
           data.app.filename
         )}&category=${encodeURIComponent(data.app.category)}`
       )
       if (open)
         window.open(
-          `${getUrl()}/mixlab/app?filename=${encodeURIComponent(
+          `${getUrl()}/mixlab/app${
+            data.app.idle_animation ? '/her.html' : ''
+          }?filename=${encodeURIComponent(
             data.app.filename
           )}&category=${encodeURIComponent(data.app.category)}`
         )
@@ -397,11 +393,11 @@ async function save (json, download = false, showInfo = true) {
 
 function getInputsAndOutputs () {
   const inputs =
-      `LoadImage LoadImagesToBatch ImagesPrompt_ VHS_LoadVideo CLIPTextEncode PromptSlide TextInput_ Color FloatSlider IntNumber CheckpointLoaderSimple LoraLoader`.split(
+      `LoadImage LoadImagesToBatch ImagesPrompt_ LoadAndCombinedAudio_ LoadVideoAndSegment_ VHS_LoadVideo CLIPTextEncode PromptSlide TextInput_ Color FloatSlider IntNumber CheckpointLoaderSimple LoraLoader`.split(
         ' '
       ),
     outputs =
-      `SaveTripoSRMesh,PreviewImage,SaveImage,TransparentImage,ShowTextForGPT,VHS_VideoCombine,VideoCombine_Adv,Image Save,SaveImageAndMetadata_,ClipInterrogator`.split(
+      `SaveTripoSRMesh,PreviewImage,SaveImage,TransparentImage,ShowTextForGPT,CombineAudioVideo,VHS_VideoCombine,VideoCombine_Adv,Image Save,SaveImageAndMetadata_,ClipInterrogator`.split(
         ','
       )
 
@@ -427,9 +423,9 @@ function getInputsAndOutputs () {
 app.registerExtension({
   name: 'Mixlab.utils.AppInfo',
   init () {
-    if (!window._nodesAll) {
-      getObjectInfo().then(r => (window._nodesAll = r))
-    }
+    // if (!window._nodesAll) {
+    //   getObjectInfo().then(r => (window._nodesAll = r))
+    // }
   },
   async beforeRegisterNodeDef (nodeType, nodeData, app) {
     if (nodeType.comfyClass == 'AppInfo') {
@@ -445,20 +441,19 @@ app.registerExtension({
         const { input, output } = getInputsAndOutputs()
         input_ids.value = input.join('\n')
         output_ids.value = output.join('\n')
-
         const widget = {
           type: 'div',
           name: 'AppInfoRun',
           draw (ctx, node, widget_width, y, widget_height) {
-            Object.assign(
-              this.div.style,
-              get_position_style(
+            Object.assign(this.div.style, {
+              ...get_position_style(
                 ctx,
                 widget_width,
                 node.size[1] - widget_height,
                 node.size[1]
-              )
-            )
+              ),
+              zIndex: 1
+            })
           }
         }
 
@@ -500,6 +495,21 @@ app.registerExtension({
             alert('Please run the workflow before saving')
             // app.queuePrompt(0, 1)
             this.widgets.filter(w => w.name === 'version')[0].value += 1
+          }
+        })
+
+        //td bg
+        const tdBG = document.createElement('button')
+        tdBG.innerText = 'Canvas Mode'
+        tdBG.style = style
+        tdBG.style.marginLeft = '12px'
+
+        tdBG.addEventListener('click', () => {
+          td_bg.toggle()
+          if (td_bg.running) {
+            tdBG.style.background = 'yellow'
+          } else {
+            tdBG.style.background = 'transparent'
           }
         })
 
@@ -659,6 +669,7 @@ app.registerExtension({
 
         btns.appendChild(btn)
         btns.appendChild(download)
+        btns.appendChild(tdBG)
 
         document.body.appendChild(widget.div)
         this.addCustomWidget(widget)
@@ -687,9 +698,8 @@ app.registerExtension({
           }
 
           const div = this.widgets.filter(w => w.div)[0].div
-          Array.from(
-            div.querySelectorAll('button'),
-            b => (b.style.background = 'yellow')
+          Array.from(div.querySelectorAll('button'), b =>
+            b.innerText != 'Canvas Mode' ? (b.style.background = 'yellow') : ''
           )
         } catch (error) {}
       }

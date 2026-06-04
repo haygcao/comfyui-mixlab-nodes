@@ -4,6 +4,8 @@ import { api } from '../../../scripts/api.js'
 import { $el } from '../../../scripts/ui.js'
 import { applyTextReplacements } from '../../../scripts/utils.js'
 
+import { loadExternalScript, get_position_style } from './common.js'
+
 function loadImageToCanvas (base64Image) {
   var img = new Image()
   var canvas = document.createElement('canvas')
@@ -88,37 +90,40 @@ function getContentTypeFromBase64 (base64Data) {
 // const blob = base64ToBlob(base64Data, contentType);
 // console.log(blob);
 
-function get_position_style (ctx, widget_width, y, node_height) {
-  const MARGIN = 4 // the margin around the html element
+// function get_position_style (ctx, widget_width, y, node_height) {
+//   const MARGIN = 4 // the margin around the html element
 
-  /* Create a transform that deals with all the scrolling and zooming */
-  const elRect = ctx.canvas.getBoundingClientRect()
-  const transform = new DOMMatrix()
-    .scaleSelf(
-      elRect.width / ctx.canvas.width,
-      elRect.height / ctx.canvas.height
-    )
-    .multiplySelf(ctx.getTransform())
-    .translateSelf(MARGIN, MARGIN + y)
+//   /* Create a transform that deals with all the scrolling and zooming */
+//   const elRect = ctx.canvas.getBoundingClientRect()
+//   const transform = new DOMMatrix()
+//     .scaleSelf(
+//       elRect.width / ctx.canvas.width,
+//       elRect.height / ctx.canvas.height
+//     )
+//     .multiplySelf(ctx.getTransform())
+//     .translateSelf(MARGIN, MARGIN + y)
 
-  return {
-    transformOrigin: '0 0',
-    transform: transform,
-    left: `0`,
-    top: `0`,
-    cursor: 'pointer',
-    position: 'absolute',
-    maxWidth: `${widget_width - MARGIN * 2}px`,
-    // maxHeight: `${node_height - MARGIN * 2}px`, // we're assuming we have the whole height of the node
-    width: `${widget_width - MARGIN * 2}px`,
-    // height: `${node_height * 0.3 - MARGIN * 2}px`,
-    // background: '#EEEEEE',
-    display: 'flex',
-    flexDirection: 'column',
-    // alignItems: 'center',
-    justifyContent: 'space-around'
-  }
-}
+//   return {
+//     transformOrigin: '0 0',
+//     transform: transform,
+//     left:
+//       document.querySelector('.comfy-menu').style.display === 'none'
+//         ? `60px`
+//         : `0`,
+//     top: `0`,
+//     cursor: 'pointer',
+//     position: 'absolute',
+//     maxWidth: `${widget_width - MARGIN * 2}px`,
+//     // maxHeight: `${node_height - MARGIN * 2}px`, // we're assuming we have the whole height of the node
+//     width: `${widget_width - MARGIN * 2}px`,
+//     // height: `${node_height * 0.3 - MARGIN * 2}px`,
+//     // background: '#EEEEEE',
+//     display: 'flex',
+//     flexDirection: 'column',
+//     // alignItems: 'center',
+//     justifyContent: 'space-around'
+//   }
+// }
 
 const getLocalData = key => {
   let data = {}
@@ -344,7 +349,7 @@ app.registerExtension({
           draw (ctx, node, widget_width, y, widget_height) {
             Object.assign(
               this.div.style,
-              get_position_style(ctx, widget_width, 44, node.size[1])
+              get_position_style(ctx, widget_width, 44, node.size[1], 60)
             )
           }
         }
@@ -530,7 +535,7 @@ app.registerExtension({
           draw (ctx, node, widget_width, y, widget_height) {
             Object.assign(
               this.div.style,
-              get_position_style(ctx, widget_width, y, node.size[1])
+              get_position_style(ctx, widget_width, y, node.size[1], 36)
             )
           }
         }
@@ -675,6 +680,18 @@ const createInputImageForBatch = (base64, widget) => {
   return im
 }
 
+// 添加新图片
+const addBase64ToWidgetForLoadImagesToBatch = (
+  base64,
+  imagesWidget,
+  imagesDiv
+) => {
+  if (!imagesWidget.value.base64) imagesWidget.value.base64 = []
+  imagesWidget.value.base64.push(base64)
+  let im = createInputImageForBatch(base64, imagesWidget)
+  imagesDiv.appendChild(im)
+}
+
 app.registerExtension({
   name: 'Mixlab.Comfy.LoadImagesToBatch',
   async getCustomWidgets (app) {
@@ -705,7 +722,6 @@ app.registerExtension({
 
   async beforeRegisterNodeDef (nodeType, nodeData, app) {
     if (nodeType.comfyClass == 'LoadImagesToBatch') {
-
       const orig_nodeCreated = nodeType.prototype.onNodeCreated
 
       nodeType.prototype.onNodeCreated = function () {
@@ -717,10 +733,10 @@ app.registerExtension({
           type: 'div',
           name: 'image_base64',
           draw (ctx, node, widget_width, y, widget_height) {
-            Object.assign(
-              this.div.style,
-              get_position_style(ctx, widget_width, 44, node.size[1])
-            )
+            Object.assign(this.div.style, {
+              ...get_position_style(ctx, widget_width, y, node.size[1], 72),
+              top: `${widget_height}px`
+            })
           },
           serialize: false
         }
@@ -751,12 +767,17 @@ app.registerExtension({
             base64 = await loadImageToCanvas(base64)
             // console.log(base64)
             if (!imagesWidget.value) imagesWidget.value = { base64: [] }
-            imagesWidget.value.base64.push(base64)
-            let im = createInputImageForBatch(base64, imagesWidget)
-            imagesDiv.appendChild(im)
+            addBase64ToWidgetForLoadImagesToBatch(
+              base64,
+              imagesWidget,
+              imagesDiv
+            )
           }
           reader.readAsDataURL(file)
         })
+
+        // 如果是复制的，有数据 , 这个不生效，取不到数据， 需要在nodeCreated里获取
+        // console.log('#LoadImagesToBatch', imagesWidget.value?.base64)
 
         const btn = document.createElement('button')
         btn.innerText = 'Upload Image'
@@ -829,18 +850,36 @@ app.registerExtension({
       }
     }
   },
+
   async loadedGraphNode (node, app) {
     if (node.type === 'LoadImagesToBatch') {
-      // await sleep(0)
       let imagesWidget = node.widgets.filter(w => w.name === 'images')[0]
       let imagePreview = node.widgets.filter(w => w.name == 'image_base64')[0]
-
-      let pre = imagePreview.div.querySelector('.images_preview')
+      // console.log('#LoadImagesToBatch', imagesWidget.value?.base64)
+      let imagesDiv = imagePreview.div.querySelector('.images_preview')
+      imagesDiv.innerHTML = ''
       for (const d of imagesWidget.value?.base64 || []) {
         let im = createInputImageForBatch(d, imagesWidget)
-        pre.appendChild(im)
+        imagesDiv.appendChild(im)
       }
     }
+  },
+  nodeCreated (node, app) {
+    //数据延迟？？
+    setTimeout(() => {
+      // console.log('#LoadImagesToBatch', node.type)
+      if (node.type === 'LoadImagesToBatch') {
+        let imagesWidget = node.widgets.filter(w => w.name === 'images')[0]
+        let imagePreview = node.widgets.filter(w => w.name == 'image_base64')[0]
+
+        let imagesDiv = imagePreview?.div?.querySelector('.images_preview')
+        imagesDiv.innerHTML = ''
+        for (const d of imagesWidget.value?.base64 || []) {
+          let im = createInputImageForBatch(d, imagesWidget)
+          imagesDiv.appendChild(im)
+        }
+      }
+    }, 1000)
   }
 })
 
@@ -848,9 +887,11 @@ app.registerExtension({
 app.registerExtension({
   name: 'Mixlab.output.ComparingTwoFrames_',
   init () {
+    loadExternalScript('/mixlab/app/lib/juxtapose.min.js')
+
     $el('link', {
       rel: 'stylesheet',
-      href: '/extensions/comfyui-mixlab-nodes/lib/juxtapose.css',
+      href: '/mixlab/app/lib/juxtapose.css',
       parent: document.head
     })
 
@@ -868,8 +909,8 @@ app.registerExtension({
       const onNodeCreated = nodeType.prototype.onNodeCreated
       nodeType.prototype.onNodeCreated = function () {
         const r = onNodeCreated
-        ? onNodeCreated.apply(this, arguments)
-        : undefined
+          ? onNodeCreated.apply(this, arguments)
+          : undefined
 
         this.size = [400, this.size[1]]
         console.log('##onNodeCreated', this)
@@ -877,10 +918,10 @@ app.registerExtension({
           type: 'div',
           name: 'preview',
           draw (ctx, node, widget_width, y, widget_height) {
-            Object.assign(
-              this.div.style,
-              get_position_style(ctx, 400, 44, node.size[1])
-            )
+            let s = get_position_style(ctx, widget_width, 44, node.size[1], 36)
+            delete s.height
+
+            Object.assign(this.div.style, s)
           },
           serialize: false
         }
@@ -891,19 +932,14 @@ app.registerExtension({
         this.addCustomWidget(widget)
         this.serialize_widgets = true //需要保存参数
 
-
         const onRemoved = this.onRemoved
         this.onRemoved = () => {
           widget.div.remove()
           return onRemoved?.()
         }
 
-
-       return r
-
+        return r
       }
-
-     
 
       const onExecuted = nodeType.prototype.onExecuted
       nodeType.prototype.onExecuted = function (message) {
@@ -964,7 +1000,7 @@ app.registerExtension({
             label: 'After'
           }
         ]
-        this.size=[this.size[0],300]
+        this.size = [this.size[0], 300]
       }
     }
   },
@@ -974,7 +1010,6 @@ app.registerExtension({
       // node.widgets[0].div.id = 'mix_comparingtowframes_' + node.id
       // if (node.widgets_values && node.widgets_values[0]) {
       //   node.widgets[0].div.innerHTML = ''
-
       //   let slider = new juxtapose.JXSlider(
       //     '#mix_comparingtowframes_' + node.id,
       //     node.widgets_values,

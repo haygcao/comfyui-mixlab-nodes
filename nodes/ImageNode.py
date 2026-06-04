@@ -1,22 +1,37 @@
 import numpy as np
 import requests
 import torch
+import torchvision.transforms.v2 as T
 # from PIL import Image, ImageDraw
 from PIL import Image, ImageOps,ImageFilter,ImageEnhance,ImageDraw,ImageSequence, ImageFont
 from PIL.PngImagePlugin import PngInfo
 import base64,os,random
 from io import BytesIO
 import folder_paths
+import node_helpers
 import json,io
 import comfy.utils
 from comfy.cli_args import args
 import cv2
-import string
+import string,re
 import math,glob
 from .Watcher import FolderWatcher
-import hashlib
+
+from itertools import product
 
 
+# 文件名排序
+def sort_by_filename(items):
+    def extract_parts(filename):
+        # 使用正则表达式将文件名拆分为数字和非数字部分
+        parts = re.split(r'(\d+)', filename)
+        # 将数字部分转换为整数以便正确排序，同时保留非数字部分
+        parts = [int(part) if part.isdigit() else part for part in parts]
+        return parts
+
+    # 按照 file_name 的拆分部分进行排序
+    sorted_items = sorted(items, key=lambda x: extract_parts(x['file_name']))
+    return sorted_items
 
 # 将PIL图片转换为OpenCV格式
 def pil_to_opencv(image):
@@ -28,140 +43,98 @@ def opencv_to_pil(image):
     pil_image = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     return pil_image
 
+# 列出目录下面的所有文件
+def get_files_with_extension(directory, extensions):
+    file_list = []
+    # 确保extensions参数是一个list，即使只有一个元素
+    if not isinstance(extensions, (tuple, list)):
+        extensions = [extensions]
+    for root, dirs, files in os.walk(directory):
+        # print(f"Files at {root}: {files}")  # 确认files是一个字符串列表
+        for file in files:
+            # 检查文件是否以任何一个提供的扩展名结尾
+            if any(file.endswith(ext) for ext in extensions):
+                # 直接将文件名添加到列表中
+                file_list.append(file)
+    return file_list
+def composite_images(foreground, background, mask, is_multiply_blend=False, position="overall", scale=0.25):
+    width, height = foreground.size
+    bg_image = background
+    bwidth, bheight = bg_image.size
 
-def composite_images(foreground, background, mask,is_multiply_blend=False,position="overall"):
-    width,height=foreground.size
- 
-    bg_image=background
+    scale = max(scale, 1 / bwidth)
+    scale = max(scale, 1 / bheight)
 
-    bwidth,bheight=bg_image.size
+    def determine_scale_option(width, height):
+        return 'height' if height > width else 'width'
 
-    # 按z-index排序
-    if position=="overall":
+    if position == "overall":
         layer = {
-                "x":0,
-                "y":0,
-                "width":bwidth,
-                "height":bheight,
-                "z_index":88,
-                "scale_option":'overall',
-                "image":foreground,
-                "mask":mask
+            "x": 0,
+            "y": 0,
+            "width": bwidth,
+            "height": bheight,
+            "z_index": 88,
+            "scale_option": 'overall',
+            "image": foreground,
+            "mask": mask
         }
+    else:
+        scale_option = determine_scale_option(width, height)
+        if scale_option == 'height':
+            scale = bheight * scale / height
+        else:
+            scale = bwidth * scale / width
 
-    elif position=='center_bottom':
-        
-        scale = int(bwidth*0.25) / width
+        new_width = int(width * scale)
         new_height = int(height * scale)
 
-        layer = {
-                "x":int(bwidth*0.75*0.5),
-                "y":bheight-new_height-24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
-        }
-
-    elif position=='right_bottom':
-        
-        scale = int(bwidth*0.25) / width
-        new_height = int(height * scale)
-
-        layer = {
-                "x":bwidth-int(bwidth*0.25)-24,
-                "y":bheight-new_height-24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
-        }
-
-
-    elif position=='center_top':
-        
-        scale = int(bwidth*0.25) / width
-        new_height = int(height * scale)
+        if position == 'center_bottom':
+            x_position = int((bwidth - new_width) * 0.5)
+            y_position = bheight - new_height - 24
+        elif position == 'right_bottom':
+            x_position = bwidth - new_width - 24
+            y_position = bheight - new_height - 24
+        elif position == 'center_top':
+            x_position = int((bwidth - new_width) * 0.5)
+            y_position = 24
+        elif position == 'right_top':
+            x_position = bwidth - new_width - 24
+            y_position = 24
+        elif position == 'left_top':
+            x_position = 24
+            y_position = 24
+        elif position == 'left_bottom':
+            x_position = 24
+            y_position = bheight - new_height - 24
+        elif position == 'center_center':
+            x_position = int((bwidth - new_width) * 0.5)
+            y_position = int((bheight - new_height) * 0.5)
 
         layer = {
-                "x":int( bwidth*0.75*0.5),
-                "y":24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
+            "x": x_position,
+            "y": y_position,
+            "width": new_width,
+            "height": new_height,
+            "z_index": 88,
+            "scale_option": scale_option,
+            "image": foreground,
+            "mask": mask
         }
 
-    elif position=='right_top':
-        
-        scale = int(bwidth*0.25) / width
-        new_height = int(height * scale)
+    # Resize the foreground image with antialiasing
+    try:
+        resampling_method = Image.Resampling.LANCZOS
+    except AttributeError:
+        resampling_method = Image.ANTIALIAS
 
-        layer = {
-                "x":bwidth-int(bwidth*0.25)-24,
-                "y":24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
-        }
-    elif position=='left_top':
-        
-        scale = int(bwidth*0.25) / width
-        new_height = int(height * scale)
+    layer_image = layer['image'].resize((layer['width'], layer['height']), resampling_method)
+    layer_mask = layer['mask'].resize((layer['width'], layer['height']), resampling_method)
 
-        layer = {
-                "x":24,
-                "y":24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
-        }
-    elif position=='left_bottom':
-        
-        scale = int(bwidth*0.25) / width
-        new_height = int(height * scale)
+    bg_image.paste(layer_image, (layer['x'], layer['y']), layer_mask)
 
-        layer = {
-                "x":24,
-                "y":bheight-new_height-24,
-                "width":int(bwidth*0.25),
-                "height":int(bheight*0.25),
-                "z_index":88,
-                "scale_option":'width',
-                "image":foreground,
-                "mask":mask
-        }
-                
-    # width, height = bg_image.size
+    return bg_image.convert('RGB')
 
-    layer_image=layer['image']
-    layer_mask=layer['mask']
-    
-    bg_image=merge_images(bg_image,
-                        layer_image,
-                        layer_mask,
-                        layer['x'],
-                        layer['y'],
-                        layer['width'],
-                        layer['height'],
-                        layer['scale_option'],
-                        is_multiply_blend )
-                   
-    bg_image=bg_image.convert('RGB')
-    
-    return bg_image
 
 
 def count_files_in_directory(directory):
@@ -200,7 +173,8 @@ class AnyType(str):
 any_type = AnyType("*")
 
 
-FONT_PATH= os.path.abspath(os.path.join(os.path.dirname(__file__),'../assets/王汉宗颜楷体繁.ttf'))
+FONT_PATH= os.path.abspath(os.path.join(os.path.dirname(__file__),"..","assets","fonts"))
+
 
 MAX_RESOLUTION=8192
 
@@ -526,6 +500,53 @@ def load_image(fp,white_bg=False):
         
     return images
 
+
+# 读取图片数据，转成tensor
+def load_image_to_tensor( image):
+    image_path = folder_paths.get_annotated_filepath(image)
+        
+    img = node_helpers.pillow(Image.open, image_path)
+        
+    output_images = []
+    output_masks = []
+    w, h = None, None
+
+    excluded_formats = ['MPO']
+        
+    for i in ImageSequence.Iterator(img):
+        i = node_helpers.pillow(ImageOps.exif_transpose, i)
+
+        if i.mode == 'I':
+            i = i.point(lambda i: i * (1 / 255))
+        image = i.convert("RGB")
+
+        if len(output_images) == 0:
+            w = image.size[0]
+            h = image.size[1]
+            
+        if image.size[0] != w or image.size[1] != h:
+            continue
+            
+        image = np.array(image).astype(np.float32) / 255.0
+        image = torch.from_numpy(image)[None,]
+        if 'A' in i.getbands():
+            mask = np.array(i.getchannel('A')).astype(np.float32) / 255.0
+            mask = 1. - torch.from_numpy(mask)
+        else:
+            mask = torch.zeros((64,64), dtype=torch.float32, device="cpu")
+        output_images.append(image)
+        output_masks.append(mask.unsqueeze(0))
+
+    if len(output_images) > 1 and img.format not in excluded_formats:
+        output_image = torch.cat(output_images, dim=0)
+        output_mask = torch.cat(output_masks, dim=0)
+    else:
+        output_image = output_images[0]
+        output_mask = output_masks[0]
+
+    return (output_image, output_mask)
+
+
 def load_image_and_mask_from_url(url, timeout=10):
     # Load the image from the URL
     response = requests.get(url, timeout=timeout)
@@ -766,8 +787,7 @@ def areaToMask(x,y,w,h,image):
 #     return bg_image
 
 
-import cv2
-import numpy as np
+
 
 # ps的正片叠底
 # 可以基于https://www.cnblogs.com/jsxyhelu/p/16947810.html ，用gpt写python代码
@@ -802,85 +822,78 @@ def multiply_blend(image1, image2):
 
 # cv2.imwrite('result.jpg', result)
 
+# 使用gpt4o优化代码
+# 为了消除图像合并时出现的灰色描边，可以使用以下方法：
+# 调整透明度：确保透明像素不会引入不需要的颜色。
+# 预处理图像：在缩放图像之前，可以先将图像的边缘进行预处理，例如扩展边缘颜色，减少抗锯齿带来的过渡效果。
 
-def merge_images(bg_image, layer_image, mask, x, y, width, height, scale_option,is_multiply_blend=False):
+def merge_images(bg_image, layer_image, mask, x, y, width, height, scale_option, is_multiply_blend=False):
     # 打开底图
     bg_image = bg_image.convert("RGBA")
 
     # 打开图层
     layer_image = layer_image.convert("RGBA")
-    # layer_image = layer_image.resize((width, height))
-
+   
     # 根据缩放选项调整图像大小
     if scale_option == "height":
         # 按照高度比例缩放
         original_width, original_height = layer_image.size
         scale = height / original_height
         new_width = int(original_width * scale)
-        layer_image = layer_image.resize((new_width, height))
+        layer_image = layer_image.resize((new_width, height), Image.NEAREST)
     elif scale_option == "width":
         # 按照宽度比例缩放
         original_width, original_height = layer_image.size
         scale = width / original_width
         new_height = int(original_height * scale)
-        layer_image = layer_image.resize((width, new_height))
+        layer_image = layer_image.resize((width, new_height), Image.NEAREST)
     elif scale_option == "overall":
         # 整体缩放
-        layer_image = layer_image.resize((width, height))
-
+        layer_image = layer_image.resize((width, height), Image.NEAREST)
     elif scale_option == "longest":
         original_width, original_height = layer_image.size
         if original_width > original_height:
-            new_width=width
+            new_width = width
             scale = width / original_width
             new_height = int(original_height * scale)
-            x=0
-            y=int((height-new_height)*0.5)
+            x = 0
+            y = int((height - new_height) * 0.5)
         else:
-            new_height=height
+            new_height = height
             scale = height / original_height
             new_width = int(original_height * scale)
-            x=int((width-new_width)*0.5)
-            y=0
-    # elif side == "shortest":
-    #         if width < height:
-    #              
-    #         else:
-    #              
-    
+            x = int((width - new_width) * 0.5)
+            y = 0
 
     # 调整mask的大小
     nw, nh = layer_image.size
-    mask = mask.resize((nw, nh))
+    mask = mask.resize((nw, nh), Image.NEAREST)
 
-    # # 分离出a通道
-    # r, g, b, alpha = layer_image.split()
-    # alpha = ImageOps.invert(alpha)
-    # # 创建一个新的RGB图像
-    # new_rgb_image = Image.new("RGB", layer_image.size)
-    # # 将透明通道粘贴到新的RGB图像上
-    # new_rgb_image.paste(layer_image, (0, 0), mask=alpha)
-   
-    # new_rgb_image.paste(layer_image, (x, y), mask=mask)
-    # mask=new_rgb_image.convert('L')
-    # mask = ImageOps.invert(mask)
+    # 预处理图像边缘以减少灰色描边
+    layer_image = layer_image.filter(ImageFilter.SMOOTH)
 
     if is_multiply_blend:
-        bg_image_white=Image.new("RGB", bg_image.size,(255, 255, 255))
+        bg_image_white = Image.new("RGB", bg_image.size, (255, 255, 255))
 
         bg_image_white.paste(layer_image, (x, y), mask=mask)
-        bg_image=multiply_blend(bg_image_white,bg_image)
-        bg_image=bg_image.convert("RGBA")
+        bg_image = multiply_blend(bg_image_white, bg_image)
+        bg_image = bg_image.convert("RGBA")
     else:
-        transparent_img = Image.new("RGBA",layer_image.size, (255, 255, 255, 0))
-        transparent_img.paste(layer_image,(0, 0), mask)
-        # transparent_img.save('test.png')
-        bg_image.paste(transparent_img, (x, y), transparent_img)
+        transparent_img = Image.new("RGBA", layer_image.size, (255, 255, 255, 0))
+        # 调整透明度处理
+        for i in range(transparent_img.size[0]):
+            for j in range(transparent_img.size[1]):
+                r, g, b, a = transparent_img.getpixel((i, j))
+                if a > 0:
+                    transparent_img.putpixel((i, j), (r, g, b, 255))
 
+        transparent_img.paste(layer_image, (0, 0), mask)
+        bg_image.paste(transparent_img, (x, y), transparent_img)
 
     # 输出合成后的图片
     return bg_image
 
+#MixCopilot
 
 def resize_2(img):
     # 检查图像的高度是否是2的倍数，如果不是，则调整高度
@@ -955,51 +968,70 @@ def resize_image(layer_image, scale_option, width, height,color="white"):
 
 
 
+def generate_text_image(text, 
+                        font_path,
+                        font_size, 
+                        text_color, 
+                        vertical=True, 
+                        stroke=False, 
+                        stroke_color=(0, 0, 0), 
+                        stroke_width=1, 
+                        spacing=0, 
+                        line_spacing=0,
+                        padding=4,
+                        max_characters_per_line=48,
+                        fixed_width=None):
+    
+    def split_text(text, max_chars, fixed_width=False):
+        lines = []
+        current_line = ""
+        current_length = 0
 
+        for char in text:
+            if char == '\n':
+                lines.append(current_line)
+                current_line = ""
+                current_length = 0
+            elif '\u4e00' <= char <= '\u9fff':  # Chinese character
+                if current_length + 1 <= max_chars:
+                    current_line += char
+                    current_length += 1
+                else:
+                    lines.append(current_line)
+                    current_line = char
+                    current_length = 1
+            else:  # English character or other
+                if char == ' ':
+                    space_length = 1
+                else:
+                    space_length = 1
+                if current_length + space_length <= max_chars:
+                    current_line += char
+                    current_length += space_length
+                else:
+                    lines.append(current_line)
+                    current_line = char
+                    current_length = space_length
 
+        if current_line:
+            lines.append(current_line)
 
-# def generate_text_image(text_list, font_path, font_size, text_color, vertical=True, spacing=0):
-#     # Load Chinese font
-#     font = ImageFont.truetype(font_path, font_size)
+        # Pad lines to max_chars if fixed_width is provided
+        if fixed_width:
+            lines = [line.ljust(max_chars) for line in lines]
 
-#     # Calculate image size based on the number of characters and orientation
-#     if vertical:
-#         width = font_size + 100
-#         height = font_size * len(text_list) + (len(text_list) - 1) * spacing + 100
-#     else:
-#         width = font_size * len(text_list) + (len(text_list) - 1) * spacing + 100
-#         height = font_size + 100
+        # If there's only one line and fixed_width is True, pad it
+        if fixed_width and len(lines) == 1:
+            lines[0] = lines[0].ljust(max_chars)
 
-#     # Create a blank image
-#     image = Image.new('RGBA', (width, height), (255, 255, 255,0))
-#     draw = ImageDraw.Draw(image)
+        return lines
 
-#     # Draw text
-#     if vertical:
-#         for i, char in enumerate(text_list):
-#             char_position = (50, 50 + i * font_size)
-#             draw.text(char_position, char, font=font, fill=text_color)
-#     else:
-#         for i, char in enumerate(text_list):
-#             char_position = (50 + i * (font_size + spacing), 50)
-#             draw.text(char_position, char, font=font, fill=text_color)
+    # lines = text.split("\n")
+    # Split text into lines based on max_characters_per_line
+    lines = split_text(text, max_characters_per_line,fixed_width)
 
-#     # Save the image
-#     # image.save(output_image_path)
-
-#     # 分离alpha通道
-#     alpha_channel = image.split()[3]
-
-#     # 创建一个只有alpha通道的新图像
-#     alpha_image = Image.new('L', image.size)
-#     alpha_image.putdata(alpha_channel.getdata())
-
-#     image=image.convert('RGB')
-
-#     return (image,alpha_image)
-def generate_text_image(text, font_path, font_size, text_color, vertical=True, stroke=False, stroke_color=(0, 0, 0), stroke_width=1, spacing=0):
-    # Split text into lines based on line breaks
-    lines = text.split("\n")
+    # Load font
+    font = ImageFont.truetype(font_path, font_size)
 
     # 1. Determine layout direction
     if vertical:
@@ -1009,44 +1041,50 @@ def generate_text_image(text, font_path, font_size, text_color, vertical=True, s
 
     # 2. Calculate absolute coordinates for each character
     char_coordinates = []
-    if layout == "vertical":
-        x = 0
-        y = 0
-        for i in range(len(lines)):
-            line = lines[i]
-            for char in line:
-                char_coordinates.append((x, y))
-                y += font_size + spacing
-            x += font_size + spacing
-            y = 0
-    else:
-        x = 0
-        y = 0
-        for line in lines:
-            for char in line:
-                char_coordinates.append((x, y))
-                x += font_size + spacing
-            y += font_size + spacing
-            x = 0
+    x, y = padding, padding
+    max_width, max_height = 0, 0
 
-    # 3. Calculate image width and height
     if layout == "vertical":
-        width = (len(lines) * (font_size + spacing)) - spacing
-        height = ((len(max(lines, key=len)) + 1) * (font_size + spacing)) + spacing
+        for line in lines:
+            max_char_width = max(font.getbbox(char)[2] - font.getbbox(char)[0] for char in line)
+            for char in line:
+                left, top, right, bottom = font.getbbox(char)
+                char_width = right - left
+                char_height = bottom - top
+                char_coordinates.append((x, y))
+                y += char_height + spacing
+                max_height = max(max_height, y + padding)
+            x += max_char_width + line_spacing
+            y = padding
+        max_width = x
+        total_line_width = sum(font.getbbox(line)[2] - font.getbbox(line)[0] for line in lines)
+        total_spacing = line_spacing * (len(lines) - 1)
+        max_width = total_line_width + total_spacing + padding * 2
     else:
-        width = (len(max(lines, key=len)) * (font_size + spacing)) - spacing
-        height = ((len(lines) - 1) * (font_size + spacing)) + font_size
+        for line in lines:
+            line_width, line_height = font.getbbox(line)[2] - font.getbbox(line)[0], font.getbbox(line)[3] - font.getbbox(line)[1]
+            for char in line:
+                left, top, right, bottom = font.getbbox(char)
+                char_width = right - left
+                char_height = bottom - top
+                char_coordinates.append((x, y))
+                x += char_width + spacing
+                max_width = max(max_width, x + padding)
+            y += line_height + line_spacing
+            x = padding
+        total_line_heights = sum(font.getbbox(line)[3] - font.getbbox(line)[1] for line in lines)
+        total_spacing = line_spacing * (len(lines) - 1)
+        max_height = total_line_heights + total_spacing + padding * 2
+
+    # 3. Create image with calculated width and height
+    image = Image.new('RGBA', (max_width, max_height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(image)
 
     # 4. Draw each character on the image
-    image = Image.new('RGBA', (width, height), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(image)
-    font = ImageFont.truetype(font_path, font_size)
-
     index = 0
-    for i, line in enumerate(lines):
-        for j, char in enumerate(line):
+    for line in lines:
+        for char in line:
             x, y = char_coordinates[index]
-            
             if stroke:
                 draw.text((x-stroke_width, y), char, font=font, fill=stroke_color)
                 draw.text((x+stroke_width, y), char, font=font, fill=stroke_color)
@@ -1065,7 +1103,15 @@ def generate_text_image(text, font_path, font_size, text_color, vertical=True, s
 
     image = image.convert('RGB')
 
+    # 5. Scale the image if fixed_width is specified
+    if fixed_width and fixed_width < max_width:
+        scaling_factor = fixed_width / max_width
+        new_height = int(max_height * scaling_factor)
+        image = image.resize((fixed_width, new_height), Image.ANTIALIAS)
+        alpha_image = alpha_image.resize((fixed_width, new_height), Image.ANTIALIAS)
+
     return (image, alpha_image)
+
 
 
 
@@ -1376,6 +1422,9 @@ class LoadImages_:
             image=pil2tensor(image)
             ims.append(image)
 
+        if len(ims)==0:
+            image1 = Image.new('RGB', (512, 512), color='black')
+            return (pil2tensor(image1),)
         image1 = ims[0]
         for image2 in ims[1:]:
             if image1.shape[1:] != image2.shape[1:]:
@@ -1406,7 +1455,7 @@ class LoadImagesFromPath:
                             },
                 "optional":{
                     "white_bg": (["disable","enable"],),
-                    "newest_files": (["enable", "disable"],),
+                    "sort_by": (["file_name", "newest"],),#根据文件名来排序，还是按照最新创建时间
                     "index_variable":("INT", {
                         "default": 0, 
                         "min": -1, #Minimum value
@@ -1416,13 +1465,13 @@ class LoadImagesFromPath:
                     }),
                     "watcher":(["disable","enable"],),
                     "result": ("WATCHER",),#为了激活本节点运行
-                     "prompt": ("PROMPT",),
-                    # "seed": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+                    "prompt": ("PROMPT",),
+                    "seed": (any_type,  {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
                 }
             }
     
     RETURN_TYPES = ('IMAGE','MASK','STRING','STRING',)
-    RETURN_NAMES = ("IMAGE","MASK","prompt_for_FloatingVideo","filepaths",)
+    RETURN_NAMES = ("image list","MASK","prompt_for_FloatingVideo","filepaths",)
 
     FUNCTION = "run"
 
@@ -1435,7 +1484,7 @@ class LoadImagesFromPath:
     watcher_folder=None
 
     # 运行的函数
-    def run(self,file_path,white_bg,newest_files,index_variable,watcher,result,prompt):
+    def run(self,file_path,white_bg,sort_by,index_variable,watcher,result,prompt,seed=1):
         global watcher_folder
         # print('###监听:',watcher_folder,watcher,file_path,result)
 
@@ -1458,19 +1507,23 @@ class LoadImagesFromPath:
         # 当开启了监听，则取最新的，第一个文件
         if watcher=='enable':
             index_variable=0
-            newest_files='enable'
+            sort_by='newest'
 
         # 排序
-        sorted_files = sorted(images, key=lambda x: os.path.getmtime(x['file_path']), reverse=(newest_files=='enable'))
+        if sort_by=='newest':
+            sorted_files = sorted(images, key=lambda x: os.path.getmtime(x['file_path']), reverse=True)
+        elif sort_by=='file_name':
+            # 根据文件名排序
+            sorted_files = sort_by_filename(images)
 
         imgs=[]
         masks=[]
-        file_names=[]
+        file_paths=[]
 
         for im in sorted_files:
             imgs.append(im['image'])
             masks.append(im['mask'])
-            file_names.append(im['file_name'])
+            file_paths.append(im['file_path'])
         
         # print('index_variable',index_variable)
         
@@ -1478,12 +1531,13 @@ class LoadImagesFromPath:
             if index_variable!=-1:
                 imgs=[imgs[index_variable]] if index_variable < len(imgs) else None
                 masks=[masks[index_variable]] if index_variable < len(masks) else None
-                file_names=[file_names[index_variable]] if index_variable < len(file_names) else None
+                file_paths=[file_paths[index_variable]] if index_variable < len(file_paths) else None
         except Exception as e:
             print("发生了一个未知的错误：", str(e))
 
         # print('#prompt::::',prompt)
-        return  {"ui": {"seed": [1]}, "result":(imgs,masks,prompt,file_names,)}
+        # return  {"ui": {"seed": [1]}, "result":(imgs,masks,prompt,file_names,)}
+        return  (imgs,masks,prompt,file_paths,)
 
 
 # TODO 扩大选区的功能,重新输出mask
@@ -1578,7 +1632,7 @@ class ImageCropByAlpha:
 
 
 
-
+# get_files_with_extension(FONT_PATH,'.ttf')
 
 class TextImage:
     @classmethod
@@ -1586,29 +1640,57 @@ class TextImage:
         return {"required": { 
             
                     "text": ("STRING",{"multiline": True,"default": "龍馬精神迎新歲","dynamicPrompts": False}),
-                    "font_path": ("STRING",{"multiline": False,"default": FONT_PATH,"dynamicPrompts": False}),
+                    "font": (get_files_with_extension(FONT_PATH,['.ttf','.otf']),),#后缀为 ttf
                     "font_size": ("INT",{
                                 "default":100, 
-                                "min": 100, #Minimum value
-                                "max": 1000, #Maximum value
+                                "min": 1, #Minimum value
+                                "max": 10000000, #Maximum value
                                 "step": 1, #Slider's step
                                 "display": "number" # Cosmetic only: display as "number" or "slider"
                                 }), 
                     "spacing": ("INT",{
                                 "default":12, 
-                                "min": -200, #Minimum value
-                                "max": 200, #Maximum value
+                                "min": -2000000000, #Minimum value
+                                "max": 2000000000, #Maximum value
+                                "step": 1, #Slider's step
+                                "display": "number" # Cosmetic only: display as "number" or "slider"
+                                }), 
+                    "line_spacing": ("INT",{
+                                "default":12, 
+                                "min": -2000000000, #Minimum value
+                                "max": 2000000000, #Maximum value
+                                "step": 1, #Slider's step
+                                "display": "number" # Cosmetic only: display as "number" or "slider"
+                                }), 
+                    "padding": ("INT",{
+                                "default":8, 
+                                "min": 0, #Minimum value
+                                "max": 2000000000, #Maximum value
                                 "step": 1, #Slider's step
                                 "display": "number" # Cosmetic only: display as "number" or "slider"
                                 }), 
                     "text_color":("STRING",{"multiline": False,"default": "#000000","dynamicPrompts": False}),
                     "vertical":("BOOLEAN", {"default": True},),
                     "stroke":("BOOLEAN", {"default": False},),
+                    "max_characters_per_line": ("INT",{
+                                "default":44, 
+                                "min": 1, #Minimum value
+                                "max": 2000000000, #Maximum value
+                                "step": 1, #Slider's step
+                                "display": "number" # Cosmetic only: display as "number" or "slider"
+                                }),
+                    "fixed_width":("INT",{
+                                "default":0, 
+                                "min": 0, #Minimum value
+                                "max": 2000000000, #Maximum value
+                                "step": 1, #Slider's step
+                                "display": "number" # Cosmetic only: display as "number" or "slider"
+                                }),
                              },
                 }
     
     RETURN_TYPES = ("IMAGE","MASK",)
-    # RETURN_NAMES = ("WIDTH","HEIGHT","X","Y",)
+    RETURN_NAMES = ("image","mask",)
 
     FUNCTION = "run"
 
@@ -1617,11 +1699,20 @@ class TextImage:
     INPUT_IS_LIST = False
     OUTPUT_IS_LIST = (False,False,)
 
-    def run(self,text,font_path,font_size,spacing,text_color,vertical,stroke):
+    def run(self,text,font,font_size,spacing,line_spacing,padding,text_color,vertical,stroke,max_characters_per_line,fixed_width):
         
-        # text_list=list(text)
+        font_path=os.path.join(FONT_PATH,font)
+
+        if text=="":
+            text=" "
         # stroke=False, stroke_color=(0, 0, 0), stroke_width=1, spacing=0
-        img,mask=generate_text_image(text,font_path,font_size,text_color,vertical,stroke,(0, 0, 0),1,spacing)
+        # max_characters_per_line 英文字按照空格计算1个，中文按照字数计算
+        if fixed_width==0:
+            fixed_width=None
+        img,mask=generate_text_image(text,font_path,font_size,text_color,vertical,stroke,(0, 0, 0),1,
+                                     spacing,line_spacing,padding,max_characters_per_line,
+                                     fixed_width
+                                     )
         
         img=pil2tensor(img)
         mask=pil2tensor(mask)
@@ -1655,7 +1746,7 @@ class LoadImagesFromURL:
 
     def run(self,url,seed=0):
         global urls_image
-        print(urls_image)
+        # print(urls_image)
         def filter_http_urls(urls):
             filtered_urls = []
             for url in urls.split('\n'):
@@ -1744,28 +1835,51 @@ class Image3D:
     def run(self,upload,material=None):
         # print('material',material)
         # print(upload )
-        image = base64_to_image(upload['image'])
 
-        mat=None
-        if 'material' in upload and upload['material']:
-            mat=base64_to_image(upload['material'])
-            mat=mat.convert('RGB')
-            mat=pil2tensor(mat)
+        # 截取的系列角度截图
+        images=upload['images'] if "images" in upload else []
 
-        mask = image.split()[3]
-        image=image.convert('RGB')
+        ims=[]
+        for im in images:
+            if 'type' in im and (not f"[{im['type']}]" in im['name']):
+                im['name']=im['name']+" "+f"[{im['type']}]"
+            output_image, output_mask = load_image_to_tensor(im['name'])
+            ims.append(output_image)
         
-        mask=mask.convert('L')
-
+        
+        mask=None
         bg_image=None
-        if 'bg_image' in upload and upload['bg_image']:
-            bg_image = base64_to_image(upload['bg_image'])
-            bg_image=bg_image.convert('RGB')
-            bg_image=pil2tensor(bg_image)
+        mat=None
+
+        # 如果没有系列截图
+        if len(ims)==0:
+            # 这个是3d模型当前截图
+            image = base64_to_image(upload['image'])
+
+            
+            if 'material' in upload and upload['material']:
+                mat=base64_to_image(upload['material'])
+                mat=mat.convert('RGB')
+                mat=pil2tensor(mat)
+
+            mask = image.split()[3]
+            image=image.convert('RGB')
+            
+            mask=mask.convert('L')
+
+            
+            if 'bg_image' in upload and upload['bg_image']:
+                bg_image = base64_to_image(upload['bg_image'])
+                bg_image=bg_image.convert('RGB')
+                bg_image=pil2tensor(bg_image)
 
 
-        mask=pil2tensor(mask)
-        image=pil2tensor(image)
+            mask=pil2tensor(mask)
+            image=pil2tensor(image)
+        else:
+            
+            image = torch.cat(ims, dim=0)
+
         
         m=[]
         if not material is None:
@@ -1854,10 +1968,16 @@ class CompositeImages:
                     "mask":("MASK",),
                     "background": ("IMAGE",),
                     },
-             "optional":{
-                           
+             "optional":{ 
                   "is_multiply_blend":  ("BOOLEAN", {"default": False}),
-                  "position":  (['overall',"center_bottom","center_top","right_bottom","left_bottom","right_top","left_top"],),    
+                  "position":  (['overall',"center_center","left_bottom","center_bottom","right_bottom","left_top","center_top","right_top"],),
+                   "scale": ("FLOAT",{
+                                "default":0.35, 
+                                "min": 0.01, #Minimum value
+                                "max": 1, #Maximum value
+                                "step": 0.01, #Slider's step
+                                "display": "number" # Cosmetic only: display as "number" or "slider"
+                            }), 
                     }
                 }
     
@@ -1870,15 +1990,30 @@ class CompositeImages:
 
     # OUTPUT_IS_LIST = (True,)
 
-    def run(self, foreground,mask,background,is_multiply_blend,position):
-        foreground= tensor2pil(foreground)
-        mask= tensor2pil(mask)
-        background= tensor2pil(background)
-        res=composite_images(foreground,background,mask,is_multiply_blend,position)
+    # def run(self, foreground,mask,background,is_multiply_blend,position,scale):
+    #     foreground= tensor2pil(foreground)
+    #     mask= tensor2pil(mask)
+    #     background= tensor2pil(background)
+    #     res=composite_images(foreground,background,mask,is_multiply_blend,position,scale)
         
-        return (pil2tensor(res),)
+    #     return (pil2tensor(res),)
 
+    def run(self, foreground,mask,background, is_multiply_blend, position, scale):
+        results = []
+        f1=[]
+        for fg, mask in zip(foreground, mask ):
+            f1.append([fg,mask])
+        for f, bg in product(f1, background):
+            [fg,mask]=f
+            fg_pil = tensor2pil(fg)
+            mask_pil = tensor2pil(mask)
+            bg_pil = tensor2pil(bg)
+            res = composite_images(fg_pil, bg_pil, mask_pil, is_multiply_blend, position, scale)
+            results.append(pil2tensor(res))
+        
+        output_image = torch.cat(results, dim=0)
 
+        return (output_image,)
 
 
 class EmptyLayer:
@@ -2764,14 +2899,14 @@ class ResizeImage:
                     "default": 512, 
                     "min": 1, #Minimum value
                     "max": 8192, #Maximum value
-                    "step": 8, #Slider's step
+                    "step": 1, #Slider's step
                     "display": "number" # Cosmetic only: display as "number" or "slider"
                 }),
                 "height": ("INT",{
                     "default": 512, 
                     "min": 1, #Minimum value
                     "max": 8192, #Maximum value
-                    "step": 8, #Slider's step
+                    "step": 1, #Slider's step
                     "display": "number" # Cosmetic only: display as "number" or "slider"
                 }),
                 "scale_option": (["width","height",'overall','center'],),
@@ -2787,7 +2922,7 @@ class ResizeImage:
                 }
     
     RETURN_TYPES = ("IMAGE","IMAGE","STRING","MASK",)
-    RETURN_NAMES = ("image","average_image","average_hex","mask",)
+    RETURN_NAMES = ("image list","average_image","average_hex","mask",)
 
     FUNCTION = "run"
 
@@ -2825,11 +2960,14 @@ class ResizeImage:
                     im=tensor2pil(im)
 
                     im=im.convert('RGB')
-                    a_im,hex=get_average_color_image(im)
 
+                    a_im,hex=get_average_color_image(im)
+                    
                     if average_color=='on':
                         fill_color=hex
-                        
+
+                    a_im=resize_image(a_im,scale_option,w,h,fill_color)
+
                     im=resize_image(im,scale_option,w,h,fill_color)
 
                     im=pil2tensor(im)
@@ -3207,3 +3345,148 @@ class SaveImageToLocal:
             counter += 1
 
         return ()
+
+
+class ImageBatchToList_:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": {"image_batch": ("IMAGE",), }}
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("image_list",)
+    OUTPUT_IS_LIST = (True,)
+    FUNCTION = "run"
+
+    CATEGORY = "♾️Mixlab/Image"
+
+    def run(self, image_batch):
+        images = [image_batch[i:i + 1, ...] for i in range(image_batch.shape[0])]
+        return (images, )
+
+class ImageListToBatch_:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "images": ("IMAGE",),
+            }
+        }
+
+    RETURN_TYPES = ("IMAGE",)
+    FUNCTION = "run"
+    INPUT_IS_LIST = True
+    CATEGORY = "♾️Mixlab/Image"
+
+    def run(self, images):
+        shape = images[0].shape[1:3]
+        out = []
+
+        for i in range(len(images)):
+            img = images[i].permute([0,3,1,2])
+            if images[i].shape[1:3] != shape:
+                transforms = T.Compose([
+                    T.CenterCrop(min(img.shape[2], img.shape[3])),
+                    T.Resize((shape[0], shape[1]), interpolation=T.InterpolationMode.BICUBIC),
+                ])
+                img = transforms(img)
+            out.append(img.permute([0,2,3,1]))
+
+        out = torch.cat(out, dim=0)
+
+        return (out,)
+
+
+# https://github.com/gokayfem/ComfyUI-Depth-Visualization?tab=readme-ov-file
+class DepthViewer_:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "image": ("IMAGE",),
+                "depth_map": ("IMAGE",),
+            },
+             "optional":{
+                  "frames":("IMAGEBASE64",), 
+                },
+        }
+
+    def __init__(self):
+        self.saved_reference = []
+        self.saved_depth = []
+
+        self.full_output_folder,self.filename,self.counter, self.subfolder, self.filename_prefix = folder_paths.get_save_image_path(
+            "imagesave", 
+            folder_paths.get_output_directory())
+
+    RETURN_TYPES = ("IMAGE",)
+    RETURN_NAMES = ("frames",)
+    
+    OUTPUT_NODE = True
+
+    INPUT_IS_LIST = False
+    OUTPUT_IS_LIST = (False,)
+
+    FUNCTION = "run"
+    CATEGORY = "♾️Mixlab/3D"
+    def run(self, image, depth_map,frames=None):
+        self.saved_reference.clear()
+        self.saved_depth.clear()
+        image = image[0].detach().cpu().numpy()
+        depth = depth_map[0].detach().cpu().numpy()
+
+        image = Image.fromarray(np.clip(255. * image, 0, 255).astype(np.uint8)).convert('RGB')
+        depth = Image.fromarray(np.clip(255. * depth, 0, 255).astype(np.uint8))
+
+        return self.display([image], [depth],frames)
+
+    def display(self, reference_image, depth_map,frames):
+        for (batch_number, (single_image, single_depth)) in enumerate(zip(reference_image, depth_map)):
+            filename_with_batch_num = self.filename.replace("%batch_num%", str(batch_number))
+
+            image_file = f"{filename_with_batch_num}_{self.counter:05}_reference.png"
+            single_image.save(os.path.join(self.full_output_folder, image_file))
+
+            depth_file = f"{filename_with_batch_num}_{self.counter:05}_depth.png"
+            single_depth.save(os.path.join(self.full_output_folder, depth_file))
+
+            self.saved_reference.append({
+                "filename": image_file,
+                "subfolder": self.subfolder,
+                "type": "output"
+            })
+
+            self.saved_depth.append({
+                "filename": depth_file,
+                "subfolder": self.subfolder,
+                "type": "output"
+            })
+            self.counter += 1
+
+
+        ims=[]
+        image1 = Image.new('RGB', (512, 512), color='black')
+        image1=pil2tensor(image1)
+
+        # print('frames',frames)
+        if frames!=None and "images" in frames:
+            
+            for im in frames['images']:
+                # print(im)
+                if 'type' in im and (not f"[{im['type']}]" in im['name']):
+                    im['name']=im['name']+" "+f"[{im['type']}]"
+                
+                try:
+                    output_image, output_mask = load_image_to_tensor(im['name'])
+                    ims.append(output_image)
+                except:
+                    print("no")
+                
+
+            if len(ims)>0:
+                image1 = ims[0]
+                for image2 in ims[1:]:
+                    if image1.shape[1:] != image2.shape[1:]:
+                        image2 = comfy.utils.common_upscale(image2.movedim(-1, 1), image1.shape[2], image1.shape[1], "bilinear", "center").movedim(1, -1)
+                    image1 = torch.cat((image1, image2), dim=0)
+
+        return {"ui": {"reference_image": self.saved_reference, "depth_map": self.saved_depth}, "result": (image1,)}

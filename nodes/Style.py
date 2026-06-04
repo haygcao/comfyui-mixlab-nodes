@@ -234,7 +234,7 @@ class StyleAlignedSampleReferenceLatents:
                     "steps": ("INT", {"default": 20, "min": 1, "max": 10000}),
                     "cfg": ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "step":0.1, "round": 0.01}),
 
-                    "scheduler": (comfy.samplers.KSampler.SCHEDULERS.reverse(), ), 
+                    "scheduler": (comfy.samplers.KSampler.SCHEDULERS, ), 
                     "denoise": ("FLOAT", {"default": 1, "min": 0.0, "max": 1.0, "step": 0.01}),
                     
                      }

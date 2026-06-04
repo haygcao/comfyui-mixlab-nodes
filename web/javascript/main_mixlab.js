@@ -3,31 +3,17 @@ import { app } from '../../../scripts/app.js'
 import { ComfyWidgets } from '../../../scripts/widgets.js'
 import { $el } from '../../../scripts/ui.js'
 
-let api_host = `${window.location.hostname}:${window.location.port}`
-let api_base = ''
-let url = `${window.location.protocol}//${api_host}${api_base}`
+import {
+  getQueue,
+  interrupt,
+  get_position_style,
+  base64Df,
+  getUrl,
+  createImage,
+  sleep
+} from './common.js'
 
-async function getQueue () {
-  try {
-    const res = await fetch(`${url}/queue`)
-    const data = await res.json()
-    // console.log(data.queue_running,data.queue_pending)
-    return {
-      // Running action uses a different endpoint for cancelling
-      Running: data.queue_running.length,
-      Pending: data.queue_pending.length
-    }
-  } catch (error) {
-    console.error(error)
-    return { Running: 0, Pending: 0 }
-  }
-}
-
-async function interrupt () {
-  const resp = await fetch(`${url}/interrupt`, {
-    method: 'POST'
-  })
-}
+// let url = getUrl()
 
 async function clipboardWriteImage (win, url) {
   const canvas = document.createElement('canvas')
@@ -206,22 +192,6 @@ async function shareScreen (
     previewArea.innerHTML = ''
     interrupt()
   }
-}
-
-async function sleep (t = 200) {
-  return new Promise((res, rej) => {
-    setTimeout(() => {
-      res(true)
-    }, t)
-  })
-}
-
-function createImage (url) {
-  let im = new Image()
-  return new Promise((res, rej) => {
-    im.onload = () => res(im)
-    im.src = url
-  })
 }
 
 async function compareImages (threshold, previousImage, currentImage) {
@@ -458,44 +428,6 @@ async function requestCamera () {
   return false
 }
 
-/* 
-A method that returns the required style for the html 
-*/
-function get_position_style (ctx, widget_width, y, node_height, top) {
-  const MARGIN = 4 // the margin around the html element
-
-  /* Create a transform that deals with all the scrolling and zooming */
-  const elRect = ctx.canvas.getBoundingClientRect()
-  const transform = new DOMMatrix()
-    .scaleSelf(
-      elRect.width / ctx.canvas.width,
-      elRect.height / ctx.canvas.height
-    )
-    .multiplySelf(ctx.getTransform())
-    .translateSelf(MARGIN, MARGIN + y)
-
-  return {
-    transformOrigin: '0 0',
-    transform: transform,
-    left: `0`,
-    top: `${top}px`,
-    cursor: 'pointer',
-    position: 'absolute',
-    maxWidth: `${widget_width - MARGIN * 2}px`,
-    // maxHeight: `${node_height - MARGIN * 2}px`, // we're assuming we have the whole height of the node
-    width: `${widget_width - MARGIN * 2}px`,
-    // height: `${node_height - MARGIN * 2}px`,
-    // background: '#EEEEEE',
-    display: 'flex',
-    flexDirection: 'column',
-    // alignItems: 'center',
-    justifyContent: 'space-around'
-  }
-}
-
-const base64Df =
-  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAAXNSR0IArs4c6QAAALZJREFUKFOFkLERwjAQBPdbgBkInECGaMLUQDsE0AkRVRAYWqAByxldPPOWHwnw4OBGye1p50UDSoA+W2ABLPN7i+C5dyC6R/uiAUXRQCs0bXoNIu4QPQzAxDKxHoALOrZcqtiyR/T6CXw7+3IGHhkYcy6BOR2izwT8LptG8rbMiCRAUb+CQ6WzQVb0SNOi5Z2/nX35DRyb/ENazhpWKoGwrpD6nICp5c2qogc4of+c7QcrhgF4Aa/aoAFHiL+RAAAAAElFTkSuQmCC'
-
 app.registerExtension({
   name: 'Mixlab.image.ScreenShareNode',
   async getCustomWidgets (app) {
@@ -593,17 +525,12 @@ app.registerExtension({
           type: 'HTML', // whatever
           name: 'sreen_share', // whatever
           draw (ctx, node, widget_width, y, widget_height) {
-            // console.log('ScreenSHare', y, widget_height)
+            // console.log('ScreenSHare', node)
             Object.assign(
               this.card.style,
-              get_position_style(
-                ctx,
-                widget_width,
-                widget_height * 5,
-                node.size[1],
-                40
-              )
+              get_position_style(ctx, widget_width, y, node.size[1], 40)
             )
+ 
           }
         }
 
@@ -1043,12 +970,13 @@ async function setArea (src) {
   div.innerHTML = `
     <div id='ml_overlay' style='position: absolute;top:0;background: #251f1fc4;
     height: 100vh;
-    z-index:999999;
+    z-index:99999999999999;
     width: 100%;'>
       <img id='ml_video' style='position: absolute; 
       height: ${displayHeight}px;user-select: none; 
       -webkit-user-drag: none;
       outline: 2px solid #eaeaea;
+      left: 0;
       box-shadow: 8px 9px 17px #575757;' />
       <div id='ml_selection' style='position: absolute; 
       border: 2px dashed red; 
@@ -1219,10 +1147,10 @@ app.registerExtension({
           type: 'video',
           name: 'FloatingVideo',
           draw (ctx, node, widget_width, y, widget_height) {
-            Object.assign(
-              this.card.style,
-              get_position_style(ctx, widget_width, y, node.size[1], 0)
-            )
+            Object.assign(this.card.style, {
+              ...get_position_style(ctx, widget_width, y, node.size[1], 40),
+              top: `${widget_height}px`
+            })
           }
         }
 
@@ -1267,7 +1195,7 @@ app.registerExtension({
         })
 
         widget.PictureInPicture = $el('button', {
-          innerText: 'PictureInPicture',
+          innerText: 'Picture In Picture',
           style: {
             display: 'pictureInPictureEnabled' in document ? 'block' : 'none',
             cursor: 'pointer',

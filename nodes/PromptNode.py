@@ -18,7 +18,13 @@ import json
 #     req =  request.Request("http://127.0.0.1:8188/prompt", data=data)
 #     request.urlopen(req)    
 
-embeddings_path=os.path.join(folder_paths.models_dir, "embeddings")
+def get_model_path(n=""):
+    try:
+        return folder_paths.get_folder_paths(n)[0]
+    except:
+        return os.path.join(folder_paths.models_dir, n)
+    
+embeddings_path=get_model_path("embeddings")
 
 def get_files_with_extension(directory, extension):
     
@@ -181,7 +187,8 @@ class PromptImage:
                 }
             }
     
-    RETURN_TYPES = ()
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("json_str",)
    
     OUTPUT_NODE = True
 
@@ -196,11 +203,18 @@ class PromptImage:
         filename_prefix="mixlab_"
         filename_prefix += self.prefix_append
         full_output_folder, filename, counter, subfolder, filename_prefix = folder_paths.get_save_image_path(
-            filename_prefix, self.output_dir, images[0].shape[1], images[0].shape[0])
+            filename_prefix,self.output_dir, images[0].shape[1], images[0].shape[0])
         
+        full_output_folder=os.path.join(full_output_folder,'PromptImage')
+        subfolder='PromptImage'
+
         results = list()
 
         save_to_image=save_to_image[0]=='enable'
+
+        #保存到本地的json文件，记录图片和prompt的对应关系
+        output_images=[]
+        output_prompt=[]
 
         for index in range(len(images)):
             res=[]
@@ -209,24 +223,36 @@ class PromptImage:
             for image in imgs:
                 img=tensor2pil(image)
 
+                prompt_text=prompts[index]
+
                 metadata = None
                 if save_to_image:
                     metadata = PngInfo()
-                    prompt_text=prompts[index]
                     if prompt_text is not None:
                         metadata.add_text("prompt_text", prompt_text)
                     
                 file = f"{filename}_{index}_{counter:05}_.png"
-                img.save(os.path.join(full_output_folder, file), pnginfo=metadata, compress_level=self.compress_level)
+                fp=os.path.join(full_output_folder,file)
+                img.save(fp, pnginfo=metadata, compress_level=self.compress_level)
                 res.append({
                     "filename": file,
                     "subfolder": subfolder,
                     "type": self.type
                 })
+                output_images.append(fp)
+                output_prompt.append(prompt_text)
                 counter += 1
             results.append(res)
-        
-        return { "ui": { "_images": results,"prompts":prompts } }
+
+        # if save_to_image:
+        #     # 保存为本地文件
+        #     with open(os.path.join(full_output_folder,'PromptImage.json'), 'w') as file:
+        #         json.dump(output_dict, file, ensure_ascii=False, indent=4)
+
+        return { "ui": { "_images": results,"prompts":prompts },"result":(json.dumps({
+            "images":output_images,
+            "prompts":output_prompt
+        }),) }
 
 
 

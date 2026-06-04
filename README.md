@@ -1,26 +1,68 @@
 ![](https://img.shields.io/github/release/shadowcz007/comfyui-mixlab-nodes)
 
-> 适配了最新版 comfyui 的 py3.11 ，torch 2.1.2+cu121
+> 适配了最新版 comfyui 的 py3.11 ，torch 2.3.1+cu121
 > [Mixlab nodes discord](https://discord.gg/cXs9vZSqeK)
 
+商务合作请联系 389570357@qq.com
+For business cooperation, please contact email 389570357@qq.com
+
+![Her 的DEMO页面](assets/1725710761451.png)
 
 ##### `最新`：
 
-ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。模型下载后，放置到 `models/llamafile/`
+- 新增[fal.ai](https://fal.ai/dashboard)的视频生成:Kling、RunwayGen3、LumaDreamMachine，[工作流下载](./workflow/video-all-in-one-test-workflow.json)
 
-- 右键菜单支持 text-to-text，方便对 prompt 词补全
+- 新增 SimulateDevDesignDiscussions，需要安装[swarm](https://github.com/openai/swarm)和[Comfyui-ChatTTS](https://github.com/shadowcz007/Comfyui-ChatTTS)，[工作流下载](./workflow/swarm制作的播客节点workflow.json)
 
-强烈推荐：[Phi-3-mini-4k-instruct-GGUF](https://huggingface.co/lmstudio-community/Phi-3-mini-4k-instruct-GGUF/tree/main)，备选：[llama3_if_ai_sdpromptmkr_q2k](https://hf-mirror.com/impactframes/llama3_if_ai_sdpromptmkr_q2k/tree/main)
+- 新增 SenseVoice
+
+- [新增JS-SDK，方便直接在前端项目中使用comfyui](https://github.com/shadowcz007/comfyui-js-sdk)
+
+- 新增API调用图像生成节点 TextToImage Siliconflow，可以直接调用Siliconflow提供的flux生成图像
+
+- [增加 Her 的DEMO页面，和数字人对话](https://github.com/shadowcz007/ComfyUI-Backend-MixlabNodes/blob/main/workflow/her_demo_workflow.json)
+
+- 右键菜单支持 text-to-text，方便对 prompt 词补全，支持云LLM或者是本地LLM。
+
+- 增加 MiniCPM-V 2.6 int4
+
+This is the int4 quantized version of MiniCPM-V 2.6.
+Running with int4 version would use lower GPU memory (about 7GB).
+
+- 移动端适配、修改 app 模式的 Mask 编辑器
+
+- 增加 p5.js 作为输入节点
+  [workflow](./workflow/p5workflow.json)
+  [workflow2](./workflow/p5-video-workflow.json)
+
+- App 模式增加 batch prompt，批量提示词，可以把动态提示词批量组成后运行
+
+![alt text](./assets/1722517810720.png)
+
+- 增加 API Key Input 节点，用于管理 LLM 的 Key,同时优化 LLM 相关节点，为后续 agent 模式做准备
+
+- 增加 SiliconflowLLM，可以使用由 Siliconflow 提供的免费 LLM
+
+<!-- - ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。模型下载后，放置到 `models/llamafile/` -->
+
+<!--
+强烈推荐：
+[Phi-3-mini-4k-instruct-function-calling-GGUF](https://huggingface.co/nold/Phi-3-mini-4k-instruct-function-calling-GGUF)
+
+[Phi-3-mini-4k-instruct-GGUF](https://huggingface.co/lmstudio-community/Phi-3-mini-4k-instruct-GGUF/tree/main)，备选：[llama3_if_ai_sdpromptmkr_q2k](https://hf-mirror.com/impactframes/llama3_if_ai_sdpromptmkr_q2k/tree/main)
 
 - 右键菜单支持 image-to-text，使用多模态模型，多模态使用 [llava-phi-3-mini-gguf](https://huggingface.co/xtuner/llava-phi-3-mini-gguf/tree/main)，注意需要把llava-phi-3-mini-mmproj-f16.gguf也下载
 
 ![](./assets/prompt_ai_setup.png)
-![](./assets/prompt-ai.png)
-
+![](./assets/prompt-ai.png) -->
 
 #### `相关插件推荐`
 
-<!-- [comfyui-sd-prompt-mixlab](https://github.com/shadowcz007/comfyui-sd-prompt-mixlab) -->
+[comfyui-liveportrait](https://github.com/shadowcz007/comfyui-liveportrait)
+
+[Comfyui-ChatTTS](https://github.com/shadowcz007/Comfyui-ChatTTS)
+
+[comfyui-sound-lab](https://github.com/shadowcz007/comfyui-sound-lab)
 
 [comfyui-Image-reward](https://github.com/shadowcz007/comfyui-Image-reward)
 
@@ -37,6 +79,8 @@ ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一
 - 发布为 app 的 workflow，可以在右键里再次编辑了
 - web app 可以设置分类，在 comfyui 右键菜单可以编辑更新 web app
 - 支持动态提示
+- 支持把输出显示到 comfyui 背景（TouchDesigner 风格）
+- 如果转为 web app 打开是空白的，注意检查下插件目录的名字需要是：comfyui-mixlab-nodes(如果是 zip 包下载会多了个-main 的后缀，需要去掉)
 
 ![](./assets/微信图片_20240421205440.png)
 
@@ -95,15 +139,20 @@ https://github.com/shadowcz007/comfyui-mixlab-nodes/assets/12645064/e7e77f90-e43
 
 [Voice + Real-time Face Swap Workflow](./workflow/语音+实时换脸workflow.json)
 
+- Preview Audio
+
+[text-to-audio](./workflow/text-to-audio-base-workflow.json)
+
 ### GPT
 
-> Support for calling multiple GPTs.Local LLM（llama.cpp）、 ChatGPT、ChatGLM3 、ChatGLM4 , Some code provided by rui. If you are using OpenAI's service, fill in https://api.openai.com/v1 . If you are using a local LLM service, fill in http://127.0.0.1:xxxx/v1 . Azure OpenAI:https://xxxx.openai.azure.com
+> Support for calling multiple GPTs.Local LLM 、 ChatGPT、ChatGLM3 、ChatGLM4 , Some code provided by rui. If you are using OpenAI's service, fill in https://api.openai.com/v1 . If you are using a local LLM service, fill in http://127.0.0.1:xxxx/v1 . Azure OpenAI:https://xxxx.openai.azure.com
 
-![gpt-workflow.svg](./assets/gpt-workflow.svg)
+[LLM_base_workflow](./workflow/LLM_base_workflow.json)
 
-[workflow-5](./workflow/5-gpt-workflow.json)
+- SiliconflowLLM
+- ChatGPTOpenAI
 
-最新：ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。
+<!-- 最新：ChatGPT 节点支持 Local LLM（llama.cpp），Phi3、llama3 都可以直接一个节点运行了。
 
 Model download,move to :`models/llamafile/`
 
@@ -131,7 +180,7 @@ pip install 'llama-cpp-python[server]'
 ```
 pip install llama-cpp-python \
   --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal
-```
+``` -->
 
 ## Prompt
 
@@ -157,6 +206,8 @@ pip install llama-cpp-python \
 ### Layers
 
 > A new layer class node has been added, allowing you to separate the image into layers. After merging the images, you can input the controlnet for further processing.
+
+> The composite images node overlays a foreground image onto a background image at specified positions and scales, with optional blending modes and masking capabilities. position : 'overall',"center_center","left_bottom","center_bottom","right_bottom","left_top","center_top","right_top"
 
 ![layers](./assets/layers-workflow.svg)
 
@@ -189,6 +240,19 @@ pip install llama-cpp-python \
 
 > Conveniently load images from a fixed address on the internet to ensure that default images in the workflow can be executed.
 
+#### TextImage
+
+> [下载字体](https://drxie.github.io/OSFCC/)放到 `custom_nodes/comfyui-mixlab-nodes/assets/fonts`
+
+#### MiniCPM-VQA Simple
+
+This is the int4 quantized version of MiniCPM-V 2.6.
+Running with int4 version would use lower GPU memory (about 7GB).
+
+[模型](https://huggingface.co/openbmb/MiniCPM-V-2_6-int4)
+
+![alt text](assets/1724308322276.png)
+
 ### Style
 
 > Apply VisualStyle Prompting , Modified from [ComfyUI_VisualStylePrompting](https://github.com/ExponentialML/ComfyUI_VisualStylePrompting)
@@ -211,6 +275,8 @@ pip install llama-cpp-python \
 
 ### Other Nodes
 
+- 增加 Edit Mask，方便在生成的时候手动绘制 mask [workflow](./workflow/edit-mask-workflow.json)
+
 ![main](./assets/all-workflow.svg)
 ![main2](./assets/detect-face-all.png)
 
@@ -226,9 +292,13 @@ Add edges to an image.
 
 ![FeatheredMask](./assets/FlVou_Y6kaGWYoEj1Tn0aTd4AjMI.jpg)
 
-> LaMaInpainting
+> LaMaInpainting（需要手动安装）
+
+- simple-lama-inpainting 里的 pillow 造成冲突，暂时从依赖里移除，如果有安装 simple-lama-inpainting ，节点会自动添加，没有，则不会自动添加。
 
 from [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainting)
+
+- [问题汇总](https://github.com/shadowcz007/comfyui-mixlab-nodes/issues/294)
 
 > rembgNode
 
@@ -236,16 +306,30 @@ from [simple-lama-inpainting](https://github.com/enesmsahin/simple-lama-inpainti
 
 **_ briarmbg _** model was developed by BRlA Al and can be used as an open-source model for non-commercial purposes
 
-### Improvement
+### Enhancement
 
-- Add "help" option to the context menu for each node.
-- Add "Nodes Map" option to the global context menu.
+- Direct "Help" option accessible through node context menu.
 
-An improvement has been made to directly redirect to GitHub to search for missing nodes when loading the graph.
+- "Nodes Map" feature added to global context menu.
+
+- An improvement has been made to directly redirect to GitHub to search for missing nodes when loading the graph.
+
+*** If not needed, you can comment out ```app.showMissingNodesError``` in the ```ui_mixlab.js``` file.
 
 ![help](./assets/help.png)
 
 ![node-not-found](./assets/node-not-found.png)
+
+
+- Right-click shortcut
+
+右键菜单支持 text-to-text，方便对 prompt 词补全，支持云LLM或者是本地LLM。
+The right-click menu supports text-to-text conversion, facilitating prompt word completion, and supports cloud LLMs or local LLMs.
+
+Local LLM API example:```http://localhost:1234/v1```
+
+![alt text](./assets/1724380841822.png)
+
 
 ### Models
 

@@ -3,63 +3,14 @@ import { api } from '../../../scripts/api.js'
 import { ComfyWidgets } from '../../../scripts/widgets.js'
 
 import { $el } from '../../../scripts/ui.js'
+import { injectCSS } from './common.js'
 
-// The code is based on ComfyUI-VideoHelperSuite modification.
-
-
-
-function injectCSS (css) {
-  // 检查页面中是否已经存在具有相同内容的style标签
-  const existingStyle = document.querySelector('style')
-  if (existingStyle && existingStyle.textContent === css) {
-    return // 如果已经存在相同的样式，则不进行注入
-  }
-
-  // 创建一个新的style标签，并将CSS内容注入其中
-  const style = document.createElement('style')
-  style.textContent = css
-
-  // 将style标签插入到页面的head元素中
-  const head = document.querySelector('head')
-  head.appendChild(style)
-}
+import { get_position_style } from './common.js'
 
 injectCSS(`
 .hidden{
   display:none !important
 }`)
-
-function get_position_style (ctx, widget_width, y, node_height) {
-  const MARGIN = 4 // the margin around the html element
-
-  /* Create a transform that deals with all the scrolling and zooming */
-  const elRect = ctx.canvas.getBoundingClientRect()
-  const transform = new DOMMatrix()
-    .scaleSelf(
-      elRect.width / ctx.canvas.width,
-      elRect.height / ctx.canvas.height
-    )
-    .multiplySelf(ctx.getTransform())
-    .translateSelf(MARGIN, MARGIN + y)
-
-  return {
-    transformOrigin: '0 0',
-    transform: transform,
-    left: `0`,
-    top: `0`,
-    cursor: 'pointer',
-    position: 'absolute',
-    maxWidth: `${widget_width - MARGIN * 2}px`,
-    // maxHeight: `${node_height - MARGIN * 2}px`, // we're assuming we have the whole height of the node
-    width: `${widget_width - MARGIN * 2}px`,
-    // height: `${node_height * 0.3 - MARGIN * 2}px`,
-    // background: '#EEEEEE',
-    display: 'flex',
-    flexDirection: 'column',
-    // alignItems: 'center',
-    justifyContent: 'space-around'
-  }
-}
 
 function videoUpload (node, inputName, inputData, app) {
   const imageWidget = node.widgets.find(w => w.name === 'video')
@@ -69,13 +20,15 @@ function videoUpload (node, inputName, inputData, app) {
     type: 'div',
     name: 'upload-preview',
     draw (ctx, node, widget_width, y, widget_height) {
-      Object.assign(
-        this.div.style,
-        get_position_style(ctx, widget_width, 220, node.size[1]),
-        {
-          outline: '1px solid'
-        }
-      )
+      let d = {
+        ...get_position_style(ctx, widget_width - 20, 220, node.size[1], 72),
+        outline: '1px solid',
+        top: `${widget_height + 24}px`
+      }
+
+      delete d.height
+
+      Object.assign(this.div.style, d)
     }
   }
 
@@ -240,15 +193,7 @@ app.registerExtension({
   }
 })
 
-
-function offsetDOMWidget(
-  widget,
-  ctx,
-  node,
-  widgetWidth,
-  widgetY,
-  height
-) {
+function offsetDOMWidget (widget, ctx, node, widgetWidth, widgetY, height) {
   const margin = 10
   const elRect = ctx.canvas.getBoundingClientRect()
   const transform = new DOMMatrix()
@@ -257,31 +202,32 @@ function offsetDOMWidget(
       elRect.height / ctx.canvas.height
     )
     .multiplySelf(ctx.getTransform())
-    .translateSelf(0, widgetY + margin)
+    .translateSelf(margin, widgetY + margin)
 
   const scale = new DOMMatrix().scaleSelf(transform.a, transform.d)
+
   Object.assign(widget.inputEl.style, {
     transformOrigin: '0 0',
     transform: scale,
-    left: `${transform.e}px`,
-    top: `${transform.d + transform.f}px`,
-    width: `${widgetWidth}px`,
-    height: `${(height || widget.parent?.inputHeight || 32) - margin}px`,
+    left: `${transform.a + transform.e + 56}px`,
+    top: `${transform.d + transform.f + 44}px`,
+    width: `${widgetWidth - 32}px`,
+    height: `${(height || widget.parent?.inputHeight || 32) - margin * 2}px`,
     position: 'absolute',
     background: !node.color ? '' : node.color,
     color: !node.color ? '' : 'white',
-    zIndex: 5, //app.graph._nodes.indexOf(node),
+    zIndex: 5 //app.graph._nodes.indexOf(node),
   })
 }
 
-export const hasWidgets = (node) => {
+export const hasWidgets = node => {
   if (!node.widgets || !node.widgets?.[Symbol.iterator]) {
     return false
   }
   return true
 }
 
-export const cleanupNode = (node) => {
+export const cleanupNode = node => {
   if (!hasWidgets(node)) {
     return
   }
@@ -298,43 +244,56 @@ export const cleanupNode = (node) => {
   }
 }
 
-const CreatePreviewElement = (name, val, format) => {
-  const [type] = format.split('/')  
+const createPreviewElement = (name, val, format) => {
+  const [type] = format.split('/')
   const w = {
-      name,
-      type,
-      value: val,
-      draw: function (ctx, node, widgetWidth, widgetY, height) {
-        const [cw, ch] = this.computeSize(widgetWidth)
-        offsetDOMWidget(this, ctx, node, widgetWidth, widgetY, ch)
-      },
-      computeSize: function (_) {
-        const ratio = this.inputRatio || 1
-        const width = Math.max(220, this.parent.size[0])
-        return [width, (width / ratio + 10)]
-      },
-      onRemoved: function () {
-        if (this.inputEl) {
-          this.inputEl.remove()
+    name,
+    type,
+    value: val,
+    draw: function (ctx, node, widgetWidth, widgetY, height) {
+      
+      Object.assign(
+        this.inputEl.style,
+        get_position_style(ctx, widgetWidth - 12, 220, node.size[1], 44),
+        {
+          outline: '1px solid',
+          display: 'flex',
+          flexWrap: 'wrap',
+          flexDirection: 'row',
+          justifyContent: 'flex-start',
+          top: `${height + 24}px`
         }
-      },
-    }
+      )
 
-    w.inputEl = document.createElement(type === 'video' ? 'video' : 'img')
-    w.inputEl.src = w.value
-    if (type === 'video') {
-      w.inputEl.setAttribute('type', 'video/webm');
-      w.inputEl.autoplay = true
-      w.inputEl.loop = true
-      w.inputEl.controls = false;
+
+    },
+    computeSize: function (_) {
+      const ratio = this.inputRatio || 1
+      const width = Math.max(220, this.parent.size[0])
+      return [width, width / ratio + 10]
+    },
+    onRemoved: function () {
+      if (this.inputEl) {
+        this.inputEl.remove()
+      }
     }
-    w.inputEl.onload = function () {
-      w.inputRatio = w.inputEl.naturalWidth / w.inputEl.naturalHeight
-    }
-    document.body.appendChild(w.inputEl)
-    return w
   }
 
+  w.inputEl = document.createElement(type === 'video' ? 'video' : 'img')
+  w.inputEl.src = w.value
+
+  if (type === 'video' || format.match('.mp4')) {
+    w.inputEl.setAttribute('type', 'video/webm')
+    w.inputEl.autoplay = true
+    w.inputEl.loop = true
+    w.inputEl.controls = true
+  }
+  w.inputEl.onload = function () {
+    w.inputRatio = w.inputEl.naturalWidth / w.inputEl.naturalHeight
+  }
+  document.body.appendChild(w.inputEl)
+  return w
+}
 
 app.registerExtension({
   name: 'Mixlab.Video.ImageListReplace',
@@ -349,13 +308,14 @@ app.registerExtension({
           draw (ctx, node, widget_width, y, widget_height) {
             Object.assign(
               this.div.style,
-              get_position_style(ctx, widget_width, 188, node.size[1]),
+              get_position_style(ctx, widget_width - 12, 220, node.size[1], 44),
               {
                 outline: '1px solid',
                 display: 'flex',
                 flexWrap: 'wrap',
                 flexDirection: 'row',
-                justifyContent: 'flex-start'
+                justifyContent: 'flex-start',
+                top: `${widget_height + 24}px`
               }
             )
           }
@@ -469,11 +429,16 @@ app.registerExtension({
       }
     }
 
-    if (nodeData?.name == 'VideoCombine_Adv') {
+    if (
+      nodeData?.name == 'VideoCombine_Adv' ||
+      nodeData?.name == 'CombineAudioVideo'
+    ) {
       const onExecuted = nodeType.prototype.onExecuted
       nodeType.prototype.onExecuted = function (message) {
         const prefix = 'vhs_gif_preview_'
         const r = onExecuted ? onExecuted.apply(this, message) : undefined
+
+        if (!this.widgets) this.widgets = []
 
         if (this.widgets) {
           const pos = this.widgets.findIndex(w => w.name === `${prefix}_0`)
@@ -489,12 +454,13 @@ app.registerExtension({
                 '/view?' + new URLSearchParams(params).toString()
               )
               const w = this.addCustomWidget(
-                CreatePreviewElement(
+                createPreviewElement(
                   `${prefix}_${i}`,
                   previewUrl,
                   params.format || 'image/gif'
                 )
               )
+              console.log(w)
               w.parent = this
             })
           }

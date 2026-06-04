@@ -82,13 +82,13 @@ def tensor2pil(image):
     return Image.fromarray(np.clip(255. * image.cpu().numpy().squeeze(), 0, 255).astype(np.uint8))
 
 
-def create_temp_file(image):
+def create_temp_file(image,counter=1):
     output_dir = folder_paths.get_temp_directory()
 
     (
             full_output_folder,
             filename,
-            counter,
+            _,
             subfolder,
             _,
         ) = folder_paths.get_save_image_path('tmp', output_dir)
@@ -133,7 +133,7 @@ def get_font_files(directory):
 
     return font_files
 
-r_directory = os.path.join(os.path.dirname(__file__), '../assets/')
+r_directory = os.path.join(os.path.dirname(__file__), '..','assets','/')
 
 font_files = get_font_files(r_directory)
 # print(font_files)
@@ -179,6 +179,28 @@ class ColorInput:
         b=color['b']
         a=color['a']
         return (h,r,g,b,a,)
+
+
+class KeyInput:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { 
+                    "key":("KEY",), 
+                             },
+                }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("key",)
+
+    FUNCTION = "run"
+
+    CATEGORY = "♾️Mixlab/Input"
+
+    INPUT_IS_LIST = False
+    OUTPUT_IS_LIST = (False,)
+
+    def run(self,key):
+        return (key,)
 
 
 
@@ -297,8 +319,7 @@ class FloatSlider:
             number = min_value
         elif number > max_value:
             number = max_value
-        return number
-    
+        return (number,)    
   
 class IntNumber:
     @classmethod
@@ -567,7 +588,7 @@ class AppInfo:
                              },
 
                 "optional":{
-                    "IMAGE": ("IMAGE",),
+                    "image": ("IMAGE",),
                     "description":("STRING",{"multiline": True,"default": "","dynamicPrompts": False}),
                     "version":("INT", {
                         "default": 1, 
@@ -580,6 +601,7 @@ class AppInfo:
                     "link":("STRING",{"multiline": False,"default": "https://","dynamicPrompts": False}),
                     "category":("STRING",{"multiline": False,"default": "","dynamicPrompts": False}),
                     "auto_save": (["enable","disable"],),
+                    "idle_animation": ("BOOLEAN", {"default": False},),
                 }
 
                 }
@@ -595,14 +617,21 @@ class AppInfo:
     INPUT_IS_LIST = True
     # OUTPUT_IS_LIST = (True,)
 
-    def run(self,name,input_ids,output_ids,IMAGE,description,version,share_prefix,link,category,auto_save):
+    def run(self,name,input_ids,output_ids,image,description,version,share_prefix,link,category,auto_save,idle_animation):
         name=name[0]
+
+        idle_animation=idle_animation[0]
         
-        im=None
-        if IMAGE:
-            im=IMAGE[0][0]
-            #TODO batch 的方式需要处理
-            im=create_temp_file(im)
+        im=[]
+        if image:
+            images=[image] 
+            # batch 的方式需要处理
+            images=flatten_list(images)
+            # img=image[0][0] 
+            print('AppInfo_image',len(images))
+            for i in range(len(images)):
+                img=images[i]
+                im.append(create_temp_file(img,i+1)[0])
         # image [img,] img[batch,w,h,a] 列表里面是batch，
 
         input_ids=input_ids[0]
@@ -615,7 +644,50 @@ class AppInfo:
         
         # id=get_json_hash([name,im,input_ids,output_ids,description,version])
 
-        return {"ui": {"json": [name,im,input_ids,output_ids,description,version,share_prefix,link,category]}, "result": ()}
+        return {"ui": {"json": [name,im,input_ids,output_ids,description,version,share_prefix,link,category,idle_animation]}, "result": ()}
+    
+
+    
+class CreateJsonNode:
+    @classmethod
+    def INPUT_TYPES(s):
+        return {"required": { 
+                    "key": ("STRING",{"multiline": False,"default": "data","dynamicPrompts": False}),
+                    "value":(any_type,),
+                    "save":("BOOLEAN", {"default": True},),
+                             }, 
+                "optional":{
+                    "json_str":("STRING", {"forceInput": True,}),
+                }
+
+                }
+    
+    RETURN_TYPES = ("STRING",)
+    RETURN_NAMES = ("json_str",)
+
+    FUNCTION = "run"
+
+    CATEGORY = "♾️Mixlab/Output"
+
+    OUTPUT_NODE = True
+    INPUT_IS_LIST = False
+    # OUTPUT_IS_LIST = (True,)
+
+    def run(self,key,value,save,json_str=None):
+        data={}
+
+        data[key]=value
+
+        if json_str:
+            json_obj = json.loads(json_str)
+            data.update(json_obj)
+
+        if save:
+            # 保存为本地文件
+            with open(os.path.join(folder_paths.get_output_directory(),'data.json'), 'w') as file:
+                json.dump(data, file, ensure_ascii=False, indent=4)
+
+        return (json.dumps(data),)
     
 
     
@@ -796,7 +868,7 @@ class TESTNODE_:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { 
-            "ANY":(any_type,),                
+                                "ANY":(any_type,),                
                               },
                 }
     
@@ -811,6 +883,9 @@ class TESTNODE_:
     OUTPUT_IS_LIST = (True,)
 
     def run(self,ANY):
+
+        print('#TESTNODE_',len(ANY))
+
         print(type(ANY))
         try:
             print(ANY[0].shape)
